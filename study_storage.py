@@ -8,6 +8,7 @@ import random
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,7 @@ LABEL_STYLES = {
     "color": {"color": "#e83e8c", "fill": "rgba(232, 62, 140, 0.18)"},
     "texture": {"color": "#006d77", "fill": "rgba(0, 109, 119, 0.18)"},
 }
+LABELS = tuple(LABEL_STYLES)
 
 
 @dataclass(frozen=True)
@@ -72,7 +74,10 @@ def reference_images(task: dict[str, Any], selected_image_id: str) -> list[dict[
 def load_wing_image(image_spec: dict[str, Any], size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT)) -> Image.Image:
     path = ROOT / image_spec["path"]
     if path.exists():
-        return Image.open(path).convert("RGBA").resize(size)
+        try:
+            return Image.open(path).convert("RGB").resize(size)
+        except Exception:
+            path.unlink(missing_ok=True)
     source_url = image_spec.get("source_url")
     if source_url:
         try:
@@ -83,11 +88,24 @@ def load_wing_image(image_spec: dict[str, Any], size: tuple[int, int] = (CANVAS_
 
 
 def load_remote_wing_image(source_url: str, cache_path: Path, size: tuple[int, int]) -> Image.Image:
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    image_bytes = download_image_bytes(source_url)
+    try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(image_bytes)
+    except OSError:
+        pass
+    return Image.open(io.BytesIO(image_bytes)).convert("RGB").resize(size)
+
+
+@lru_cache(maxsize=128)
+def download_image_bytes(source_url: str) -> bytes:
     quoted_url = urllib.parse.quote(source_url, safe=":/?&=%")
-    with urllib.request.urlopen(quoted_url, timeout=20) as response:
-        cache_path.write_bytes(response.read())
-    return Image.open(cache_path).convert("RGBA").resize(size)
+    request = urllib.request.Request(
+        quoted_url,
+        headers={"User-Agent": "specifly-streamlit/0.1"},
+    )
+    with urllib.request.urlopen(request, timeout=8) as response:
+        return response.read()
 
 
 def placeholder_wing_image(image_id: str, species_role: str, size: tuple[int, int]) -> Image.Image:
@@ -193,6 +211,34 @@ def canvas_has_objects(canvas_json: dict[str, Any] | None) -> bool:
     return bool(canvas_json and canvas_json.get("objects"))
 
 
+def canvas_labels(canvas_json: dict[str, Any] | None, fallback_label: str | None = None) -> list[str]:
+    if not canvas_json:
+        return [fallback_label] if fallback_label else []
+
+    label_by_color = {
+        style["color"].lower(): label
+        for label, style in LABEL_STYLES.items()
+    }
+    labels = []
+    for item in canvas_json.get("objects", []):
+        if not isinstance(item, dict):
+            continue
+        stroke = str(item.get("stroke", "")).lower()
+        label = label_by_color.get(stroke)
+        if label and label not in labels:
+            labels.append(label)
+
+    if not labels and fallback_label and canvas_has_objects(canvas_json):
+        labels.append(fallback_label)
+    return labels
+
+
+def label_display(labels: list[str] | str | None) -> str:
+    if isinstance(labels, list):
+        return ", ".join(labels)
+    return labels or ""
+
+
 def table_rows(response: Any) -> list[dict[str, Any]]:
     data = getattr(response, "data", response)
     return data if isinstance(data, list) else []
@@ -247,7 +293,7 @@ def build_rating_options(
             source="self",
             task_id=task_id,
             selected_image_id=own_submission["selected_image_id"],
-            label=own_submission["label"],
+            label=label_display(own_submission.get("labels") or own_submission["label"]),
             explanation=own_submission.get("explanation") or "",
             composite_png_base64=own_submission["composite_png_base64"],
             submission_id=str(own_submission.get("id") or f"{username}:{task_id}"),
@@ -261,7 +307,7 @@ def build_rating_options(
                 source="peer",
                 task_id=task_id,
                 selected_image_id=peer_submission["selected_image_id"],
-                label=peer_submission["label"],
+                label=label_display(peer_submission.get("labels") or peer_submission["label"]),
                 explanation=peer_submission.get("explanation") or "",
                 composite_png_base64=peer_submission["composite_png_base64"],
                 submission_id=str(peer_submission.get("id") or ""),

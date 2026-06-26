@@ -3,6 +3,7 @@ from study_storage import (
     CANVAS_WIDTH,
     build_rating_options,
     canvas_has_objects,
+    canvas_labels,
     choose_rounds,
     load_rounds,
     load_seeded_annotations,
@@ -27,6 +28,31 @@ def test_canvas_has_objects_requires_at_least_one_object():
     assert not canvas_has_objects(None)
     assert not canvas_has_objects({"objects": []})
     assert canvas_has_objects({"objects": [{"type": "path"}]})
+
+
+def test_canvas_labels_are_derived_from_stroke_colors():
+    canvas_json = {
+        "objects": [
+            {"type": "path", "stroke": "#111111"},
+            {"type": "path", "stroke": "#e83e8c"},
+            {"type": "path", "stroke": "#111111"},
+        ]
+    }
+
+    assert canvas_labels(canvas_json) == ["shape", "color"]
+
+
+def test_canvas_labels_returns_multiple_stroke_labels():
+    labels = canvas_labels(
+        {
+            "objects": [
+                {"type": "path", "stroke": "#111111"},
+                {"type": "path", "stroke": "#e83e8c"},
+                {"type": "path", "stroke": "#006d77"},
+            ]
+        }
+    )
+    assert labels == ["shape", "color", "texture"]
 
 
 def test_rating_options_include_self_peer_and_ai_with_fallback():

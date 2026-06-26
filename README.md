@@ -10,7 +10,9 @@ Prototype study app for selecting the odd butterfly wing species, annotating the
    pip install -r requirements.txt
    ```
 
-2. Create a Supabase project and run `schema/supabase.sql` in the SQL editor.
+2. Create a Supabase project and apply the migration in `supabase/migrations/`.
+
+   If your Supabase project is linked to this GitHub repo, commit and push the migration so Supabase can apply it. For manual setup, run `schema/supabase.sql` in the Supabase SQL editor.
 
 3. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and fill in:
 
@@ -24,6 +26,14 @@ Prototype study app for selecting the odd butterfly wing species, annotating the
    ```sh
    streamlit run app.py
    ```
+
+5. Check that the remote Supabase schema is reachable from the app credentials:
+
+   ```sh
+   python scripts/check_supabase_schema.py
+   ```
+
+`supabase-py` is enough for app reads and writes, but it cannot create tables with an anon key. Applying `create table` migrations requires Supabase's CLI, the SQL editor, or a direct Postgres/admin connection.
 
 ## Image Data
 
