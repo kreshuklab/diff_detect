@@ -1,0 +1,40 @@
+login page:
+instruction:
+    Hello butterfly-wing-expert-to-be,
+    please create an account or login!
+
+page:
+instruction:
+    Hello butterfly... expert {name}!
+
+    You will be shown four sets of butterfly wings, three of which from the same species. Please select the one of a different species by clicking on it. Do not choose the odd one out by a damaged wing or any other non-biological difference.
+    After you chose, label your selection to explain why you think your selection is from a different species.
+
+    Repeat this for a couple rounds (>=MIN_ROUNDS)
+
+buttons: OK
+
+page:
+4 images shown, all clickable.
+instruction: Please select the one of a different species than the other three.
+
+page:
+The selected image is shown, with the 3 references to the side.
+Annotate with brushstrokes after selecting one one of the labels: shape, color (marked as brighter region with rainbow outline), texture
+instruction: Annotate the differences in the slected one.
+
+buttons: next, done (if MIN_ROUNDS rounds have been played)
+
+page:
+instruction: Thank you for explaining {n} selections! Now, please take some time to rate other's choices.
+buttons: next
+
+page:
+the first set of butterfly wings is shown again with 3 annotated images below that are clickable. In random order one is the players own choice, one is another player's choice and one is a pregenrated choice from an AI.
+instruction: For this set of butterfly wings, choose below who selected the single species most convincingly.
+
+page (after all {n} sets have been clicked through):
+Thank you for participating!
+
+buttons: play another round, logout
+

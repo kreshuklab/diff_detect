@@ -1,0 +1,42 @@
+# Streamlit Butterfly Wing Study
+
+Prototype study app for selecting the odd butterfly wing species, annotating the visual reason, and rating annotation choices.
+
+## Setup
+
+1. Install dependencies:
+
+   ```sh
+   pip install -r requirements.txt
+   ```
+
+2. Create a Supabase project and run `schema/supabase.sql` in the SQL editor.
+
+3. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml` and fill in:
+
+   ```toml
+   SUPABASE_URL = "https://your-project.supabase.co"
+   SUPABASE_KEY = "your-supabase-anon-key"
+   ```
+
+4. Start the app:
+
+   ```sh
+   streamlit run app.py
+   ```
+
+## Image Data
+
+Rounds are defined in `data/rounds.json`. They are generated from the Hugging Face dataset `imageomics/Heliconius-Collection_Cambridge-Butterfly`.
+
+Regenerate them with:
+
+```sh
+python scripts/generate_rounds.py --rounds 12 --seed 20260626
+```
+
+The generator uses the full Heliconius CSV manifest and filters to non-hybrid, non-duplicate JPG/PNG rows. It includes the available strict same-subspecies example, then fills the remaining rounds with same-view, same-mimic-group tasks where three references share species and subspecies and the odd image uses a different species.
+
+The dataset has only one strict non-hybrid cross-species subspecies candidate with enough images (`ssp.nov.P`, ventral), so most generated rounds use the relaxed same-mimic-group rule.
+
+Each image entry has an `image_id`, local cache `path`, `source_url`, taxonomy metadata, and `species_role`. The app downloads source images into `data/images/huggingface/` on demand and falls back to deterministic placeholders if a URL cannot be reached.
