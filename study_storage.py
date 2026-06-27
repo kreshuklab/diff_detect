@@ -7,87 +7,100 @@ import json
 import random
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 from PIL import Image, ImageDraw
+from pydantic import TypeAdapter
 
+from models import (
+    DifferenceLabel,
+    RatingOption,
+    RatingPayload,
+    Round,
+    RoundImage,
+    SeededAnnotation,
+    SubmissionPayload,
+)
 
 ROOT = Path(__file__).resolve().parent
 ROUND_MANIFEST = ROOT / "data" / "rounds.json"
 SEEDED_ANNOTATIONS = ROOT / "data" / "seeded_annotations.json"
 CANVAS_WIDTH = 680
 CANVAS_HEIGHT = 420
-MIN_ROUNDS = 3
+MIN_ROUNDS = 5
 
 
-LABEL_STYLES = {
-    "shape": {"color": "#111111", "fill": "rgba(17, 17, 17, 0.18)"},
+LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
+    "shape": {"color": "#ffb000", "fill": "rgba(255, 176, 0, 0.2)"},
     "color": {"color": "#e83e8c", "fill": "rgba(232, 62, 140, 0.18)"},
     "texture": {"color": "#006d77", "fill": "rgba(0, 109, 119, 0.18)"},
 }
-LABELS = tuple(LABEL_STYLES)
+LEGACY_LABEL_COLORS: dict[str, DifferenceLabel] = {"#111111": "shape"}
+LABELS: tuple[DifferenceLabel, ...] = tuple(LABEL_STYLES)
 
 
-@dataclass(frozen=True)
-class RatingOption:
-    option_id: str
-    source: str
-    task_id: str
-    selected_image_id: str
-    label: str
-    explanation: str
-    composite_png_base64: str
-    submission_id: str | None = None
+ROUND_LIST_ADAPTER = TypeAdapter(list[Round])
+SEEDED_ANNOTATION_LIST_ADAPTER = TypeAdapter(list[SeededAnnotation])
 
 
-def load_rounds(path: Path = ROUND_MANIFEST) -> list[dict[str, Any]]:
+def load_rounds(path: Path = ROUND_MANIFEST) -> list[Round]:
     with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        return ROUND_LIST_ADAPTER.validate_python(json.load(handle))
 
 
-def load_seeded_annotations(path: Path = SEEDED_ANNOTATIONS) -> list[dict[str, Any]]:
+def load_seeded_annotations(path: Path = SEEDED_ANNOTATIONS) -> list[SeededAnnotation]:
     with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        return SEEDED_ANNOTATION_LIST_ADAPTER.validate_python(json.load(handle))
 
 
-def choose_rounds(rounds: list[dict[str, Any]], username: str, limit: int = MIN_ROUNDS) -> list[dict[str, Any]]:
+def choose_rounds(
+    rounds: list[Round], username: str, limit: int = MIN_ROUNDS
+) -> list[Round]:
     selected = list(rounds)
     random.Random(username).shuffle(selected)
     return selected[: min(limit, len(selected))]
 
 
-def image_for_id(task: dict[str, Any], image_id: str) -> dict[str, Any]:
-    for image in task["images"]:
-        if image["image_id"] == image_id:
+def image_for_id(task: Round, image_id: str) -> RoundImage:
+    for image in task.images:
+        if image.image_id == image_id:
             return image
-    raise KeyError(f"Image {image_id!r} is not part of task {task['task_id']!r}.")
+    raise KeyError(f"Image {image_id!r} is not part of task {task.task_id!r}.")
 
 
-def reference_images(task: dict[str, Any], selected_image_id: str) -> list[dict[str, Any]]:
-    return [image for image in task["images"] if image["image_id"] != selected_image_id]
+def reference_images(task: Round, selected_image_id: str) -> list[RoundImage]:
+    return [image for image in task.images if image.image_id != selected_image_id]
 
 
-def load_wing_image(image_spec: dict[str, Any], size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT)) -> Image.Image:
-    path = ROOT / image_spec["path"]
+def load_wing_image(
+    image_spec: RoundImage | dict[str, Any],
+    size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT),
+) -> Image.Image:
+    image = (
+        image_spec
+        if isinstance(image_spec, RoundImage)
+        else RoundImage.model_validate(image_spec)
+    )
+    path = ROOT / image.path
     if path.exists():
         try:
             return Image.open(path).convert("RGB").resize(size)
         except Exception:
             path.unlink(missing_ok=True)
-    source_url = image_spec.get("source_url")
-    if source_url:
+    if image.source_url:
         try:
-            return load_remote_wing_image(source_url, path, size)
+            return load_remote_wing_image(image.source_url, path, size)
         except Exception:
             pass
-    return placeholder_wing_image(image_spec["image_id"], image_spec.get("species_role", "reference"), size)
+    return placeholder_wing_image(image.image_id, image.species_role, size)
 
 
-def load_remote_wing_image(source_url: str, cache_path: Path, size: tuple[int, int]) -> Image.Image:
+def load_remote_wing_image(
+    source_url: str, cache_path: Path, size: tuple[int, int]
+) -> Image.Image:
     image_bytes = download_image_bytes(source_url)
     try:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
@@ -108,7 +121,9 @@ def download_image_bytes(source_url: str) -> bytes:
         return response.read()
 
 
-def placeholder_wing_image(image_id: str, species_role: str, size: tuple[int, int]) -> Image.Image:
+def placeholder_wing_image(
+    image_id: str, species_role: str, size: tuple[int, int]
+) -> Image.Image:
     width, height = size
     digest = hashlib.sha256(image_id.encode("utf-8")).digest()
     base_hue = digest[0]
@@ -136,12 +151,28 @@ def placeholder_wing_image(image_id: str, species_role: str, size: tuple[int, in
     draw.polygon(right, fill=main, outline=outline)
     draw.ellipse((cx - body[0], cy - body[1], cx + body[0], cy + body[1]), fill=outline)
     for offset in (-78, -36, 36, 78):
-        draw.arc((cx - 220, cy - 155 + offset, cx - 8, cy + 120 + offset), 205, 326, fill=accent, width=5)
-        draw.arc((cx + 8, cy - 155 + offset, cx + 220, cy + 120 + offset), 214, 335, fill=accent, width=5)
+        draw.arc(
+            (cx - 220, cy - 155 + offset, cx - 8, cy + 120 + offset),
+            205,
+            326,
+            fill=accent,
+            width=5,
+        )
+        draw.arc(
+            (cx + 8, cy - 155 + offset, cx + 220, cy + 120 + offset),
+            214,
+            335,
+            fill=accent,
+            width=5,
+        )
 
     if species_role == "odd":
-        draw.ellipse((cx - 210, cy - 54, cx - 120, cy + 36), outline=(232, 62, 140, 210), width=8)
-        draw.ellipse((cx + 120, cy - 54, cx + 210, cy + 36), outline=(232, 62, 140, 210), width=8)
+        draw.ellipse(
+            (cx - 210, cy - 54, cx - 120, cy + 36), outline=(232, 62, 140, 210), width=8
+        )
+        draw.ellipse(
+            (cx + 120, cy - 54, cx + 210, cy + 36), outline=(232, 62, 140, 210), width=8
+        )
 
     return bg
 
@@ -165,18 +196,18 @@ def composite_annotation(background: Image.Image, overlay_data: Any) -> str:
     return encode_png(Image.alpha_composite(base, overlay))
 
 
-def seeded_rating_option(seed: dict[str, Any], task: dict[str, Any]) -> RatingOption:
-    selected = image_for_id(task, seed["selected_image_id"])
+def seeded_rating_option(seed: SeededAnnotation, task: Round) -> RatingOption:
+    selected = image_for_id(task, seed.selected_image_id)
     background = load_wing_image(selected)
-    color = seed.get("annotation_color", LABEL_STYLES.get(seed["label"], LABEL_STYLES["shape"])["color"])
-    composite = synthetic_annotation(background, color, seed["label"])
+    color = seed.annotation_color or LABEL_STYLES[seed.label]["color"]
+    composite = synthetic_annotation(background, color, seed.label)
     return RatingOption(
-        option_id=f"{seed['source']}:{seed['task_id']}:{seed['label']}",
-        source=seed["source"],
-        task_id=seed["task_id"],
-        selected_image_id=seed["selected_image_id"],
-        label=seed["label"],
-        explanation=seed.get("explanation", ""),
+        option_id=f"{seed.source}:{seed.task_id}:{seed.label}",
+        source=seed.source,
+        task_id=seed.task_id,
+        selected_image_id=seed.selected_image_id,
+        label=seed.label,
+        explanation=seed.explanation,
         composite_png_base64=composite,
     )
 
@@ -187,11 +218,29 @@ def synthetic_annotation(background: Image.Image, color: str, label: str) -> str
     draw = ImageDraw.Draw(overlay, "RGBA")
     rgb = hex_to_rgb(color)
     if label == "shape":
-        draw.rounded_rectangle((88, 68, CANVAS_WIDTH - 88, CANVAS_HEIGHT - 58), radius=36, outline=rgb + (230,), width=10)
+        draw.rounded_rectangle(
+            (88, 68, CANVAS_WIDTH - 88, CANVAS_HEIGHT - 58),
+            radius=36,
+            outline=rgb + (230,),
+            width=10,
+        )
     elif label == "color":
-        for index, stripe in enumerate(["#f94144", "#f8961e", "#f9c74f", "#43aa8b", "#577590"]):
+        for index, stripe in enumerate(
+            ["#f94144", "#f8961e", "#f9c74f", "#43aa8b", "#577590"]
+        ):
             stripe_rgb = hex_to_rgb(stripe)
-            draw.arc((115 + index * 8, 92 + index * 7, CANVAS_WIDTH - 115, CANVAS_HEIGHT - 82), 200, 336, fill=stripe_rgb + (220,), width=6)
+            draw.arc(
+                (
+                    115 + index * 8,
+                    92 + index * 7,
+                    CANVAS_WIDTH - 115,
+                    CANVAS_HEIGHT - 82,
+                ),
+                200,
+                336,
+                fill=stripe_rgb + (220,),
+                width=6,
+            )
     else:
         for y in range(96, CANVAS_HEIGHT - 80, 34):
             draw.line((150, y, CANVAS_WIDTH - 150, y + 18), fill=rgb + (210,), width=6)
@@ -211,15 +260,17 @@ def canvas_has_objects(canvas_json: dict[str, Any] | None) -> bool:
     return bool(canvas_json and canvas_json.get("objects"))
 
 
-def canvas_labels(canvas_json: dict[str, Any] | None, fallback_label: str | None = None) -> list[str]:
+def canvas_labels(
+    canvas_json: dict[str, Any] | None, fallback_label: DifferenceLabel | None = None
+) -> list[DifferenceLabel]:
     if not canvas_json:
         return [fallback_label] if fallback_label else []
 
-    label_by_color = {
-        style["color"].lower(): label
-        for label, style in LABEL_STYLES.items()
+    label_by_color: dict[str, DifferenceLabel] = {
+        style["color"].lower(): label for label, style in LABEL_STYLES.items()
     }
-    labels = []
+    label_by_color.update(LEGACY_LABEL_COLORS)
+    labels: list[DifferenceLabel] = []
     for item in canvas_json.get("objects", []):
         if not isinstance(item, dict):
             continue
@@ -245,7 +296,9 @@ def table_rows(response: Any) -> list[dict[str, Any]]:
 
 
 def fetch_user_submissions(supabase: Any, username: str) -> list[dict[str, Any]]:
-    response = supabase.table("submissions").select("*").eq("username", username).execute()
+    response = (
+        supabase.table("submissions").select("*").eq("username", username).execute()
+    )
     return table_rows(response)
 
 
@@ -254,15 +307,21 @@ def fetch_user_ratings(supabase: Any, username: str) -> list[dict[str, Any]]:
     return table_rows(response)
 
 
-def upsert_submission(supabase: Any, payload: dict[str, Any]) -> None:
-    supabase.table("submissions").upsert(payload, on_conflict="username,task_id").execute()
+def upsert_submission(supabase: Any, payload: SubmissionPayload) -> None:
+    supabase.table("submissions").upsert(
+        payload.model_dump(mode="json"), on_conflict="username,task_id"
+    ).execute()
 
 
-def upsert_rating(supabase: Any, payload: dict[str, Any]) -> None:
-    supabase.table("ratings").upsert(payload, on_conflict="username,task_id").execute()
+def upsert_rating(supabase: Any, payload: RatingPayload) -> None:
+    supabase.table("ratings").upsert(
+        payload.model_dump(mode="json"), on_conflict="username,task_id"
+    ).execute()
 
 
-def fetch_peer_submission(supabase: Any, username: str, task_id: str) -> dict[str, Any] | None:
+def fetch_peer_submission(
+    supabase: Any, username: str, task_id: str
+) -> dict[str, Any] | None:
     response = (
         supabase.table("submissions")
         .select("*")
@@ -276,16 +335,16 @@ def fetch_peer_submission(supabase: Any, username: str, task_id: str) -> dict[st
 
 
 def build_rating_options(
-    task: dict[str, Any],
+    task: Round,
     own_submission: dict[str, Any],
     peer_submission: dict[str, Any] | None,
-    seeded_annotations: list[dict[str, Any]],
+    seeded_annotations: list[SeededAnnotation],
     username: str,
 ) -> list[RatingOption]:
-    task_id = task["task_id"]
-    seeds = [seed for seed in seeded_annotations if seed["task_id"] == task_id]
-    ai_seed = next((seed for seed in seeds if seed["source"] == "ai"), None)
-    peer_seed = next((seed for seed in seeds if seed["source"] == "peer"), None)
+    task_id = task.task_id
+    seeds = [seed for seed in seeded_annotations if seed.task_id == task_id]
+    ai_seed = next((seed for seed in seeds if seed.source == "ai"), None)
+    peer_seed = next((seed for seed in seeds if seed.source == "peer"), None)
 
     options = [
         RatingOption(
@@ -293,7 +352,9 @@ def build_rating_options(
             source="self",
             task_id=task_id,
             selected_image_id=own_submission["selected_image_id"],
-            label=label_display(own_submission.get("labels") or own_submission["label"]),
+            label=label_display(
+                own_submission.get("labels") or own_submission["label"]
+            ),
             explanation=own_submission.get("explanation") or "",
             composite_png_base64=own_submission["composite_png_base64"],
             submission_id=str(own_submission.get("id") or f"{username}:{task_id}"),
@@ -307,7 +368,9 @@ def build_rating_options(
                 source="peer",
                 task_id=task_id,
                 selected_image_id=peer_submission["selected_image_id"],
-                label=label_display(peer_submission.get("labels") or peer_submission["label"]),
+                label=label_display(
+                    peer_submission.get("labels") or peer_submission["label"]
+                ),
                 explanation=peer_submission.get("explanation") or "",
                 composite_png_base64=peer_submission["composite_png_base64"],
                 submission_id=str(peer_submission.get("id") or ""),

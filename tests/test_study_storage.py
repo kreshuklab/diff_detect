@@ -1,6 +1,7 @@
 from study_storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
+    LABEL_STYLES,
     build_rating_options,
     canvas_has_objects,
     canvas_labels,
@@ -13,8 +14,8 @@ from study_storage import (
 
 def test_choose_rounds_is_stable_for_user():
     rounds = load_rounds()
-    first = [task["task_id"] for task in choose_rounds(rounds, "ada")]
-    second = [task["task_id"] for task in choose_rounds(rounds, "ada")]
+    first = [task.task_id for task in choose_rounds(rounds, "ada")]
+    second = [task.task_id for task in choose_rounds(rounds, "ada")]
     assert first == second
     assert len(first) == 3
 
@@ -33,20 +34,26 @@ def test_canvas_has_objects_requires_at_least_one_object():
 def test_canvas_labels_are_derived_from_stroke_colors():
     canvas_json = {
         "objects": [
-            {"type": "path", "stroke": "#111111"},
+            {"type": "path", "stroke": LABEL_STYLES["shape"]["color"]},
             {"type": "path", "stroke": "#e83e8c"},
-            {"type": "path", "stroke": "#111111"},
+            {"type": "path", "stroke": LABEL_STYLES["shape"]["color"]},
         ]
     }
 
     assert canvas_labels(canvas_json) == ["shape", "color"]
 
 
+def test_canvas_labels_keep_legacy_black_shape_annotations():
+    assert canvas_labels({"objects": [{"type": "path", "stroke": "#111111"}]}) == [
+        "shape"
+    ]
+
+
 def test_canvas_labels_returns_multiple_stroke_labels():
     labels = canvas_labels(
         {
             "objects": [
-                {"type": "path", "stroke": "#111111"},
+                {"type": "path", "stroke": LABEL_STYLES["shape"]["color"]},
                 {"type": "path", "stroke": "#e83e8c"},
                 {"type": "path", "stroke": "#006d77"},
             ]
@@ -57,7 +64,7 @@ def test_canvas_labels_returns_multiple_stroke_labels():
 
 def test_rating_options_include_self_peer_and_ai_with_fallback():
     task = load_rounds()[0]
-    selected_id = task["odd_image_id"]
+    selected_id = task.odd_image_id
     own_submission = {
         "id": 1,
         "selected_image_id": selected_id,
@@ -74,20 +81,20 @@ def test_rating_options_include_self_peer_and_ai_with_fallback():
 def test_round_manifest_uses_non_hybrid_mimic_groups_and_includes_strict_example():
     strict_rounds = 0
     for task in load_rounds():
-        images = task["images"]
-        references = [image for image in images if image["species_role"] == "reference"]
-        odd = [image for image in images if image["species_role"] == "odd"]
+        images = task.images
+        references = [image for image in images if image.species_role == "reference"]
+        odd = [image for image in images if image.species_role == "odd"]
 
         assert len(images) == 4
         assert len(references) == 3
         assert len(odd) == 1
-        assert {image["hybrid_stat"] for image in images} == {"non-hybrid"}
-        assert len({image["species"] for image in references}) == 1
-        assert len({image["subspecies"] for image in references}) == 1
-        assert len({image["view"] for image in images}) == 1
-        assert len({image["mimic_group"] for image in images}) == 1
-        assert odd[0]["species"] not in {image["species"] for image in references}
-        if len({image["subspecies"] for image in images}) == 1:
+        assert {image.hybrid_stat for image in images} == {"non-hybrid"}
+        assert len({image.species for image in references}) == 1
+        assert len({image.subspecies for image in references}) == 1
+        assert len({image.view for image in images}) == 1
+        assert len({image.mimic_group for image in images}) == 1
+        assert odd[0].species not in {image.species for image in references}
+        if len({image.subspecies for image in images}) == 1:
             strict_rounds += 1
 
     assert strict_rounds >= 1

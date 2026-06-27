@@ -13,7 +13,7 @@
     "selected_image_id": "26080_Hpard_ssp_nov_09_387_jpg",
     "label": "shape",
     "explanation": "The selected Heliconius pardalinus (ssp.nov.P) differs from the three Heliconius timareta (ssp.nov.P) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_002",
@@ -29,7 +29,7 @@
     "selected_image_id": "41027_CS003617_d_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius melpomene (vulcanus) differs from the three Heliconius timareta (timareta) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_003",
@@ -45,7 +45,7 @@
     "selected_image_id": "26040_13566_H_m_thelxiopeia_V_JPG_jpg",
     "label": "shape",
     "explanation": "The selected Heliconius melpomene (thelxiopeia) differs from the three Heliconius timareta (timareta) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_004",
@@ -61,7 +61,7 @@
     "selected_image_id": "39064_CAM041523_d_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius elevatus (willmotti) differs from the three Heliconius timareta (florencia) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_005",
@@ -77,7 +77,7 @@
     "selected_image_id": "6226_CAM000197_v_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius eleuchia (eleuchia) differs from the three Heliconius cydno (alithea) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_006",
@@ -93,7 +93,7 @@
     "selected_image_id": "20383_19N1484_d_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius elevatus (willmotti) differs from the three Heliconius timareta (ssp.nov.P) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_007",
@@ -109,7 +109,7 @@
     "selected_image_id": "9733_CAM008702_v_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius melpomene (aglaope) differs from the three Heliconius timareta (ssp.nov.P) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_008",
@@ -125,7 +125,7 @@
     "selected_image_id": "9800_CAM008736_v_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius doris (doris) differs from the three Heliconius wallacei (flavescens) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_009",
@@ -141,7 +141,7 @@
     "selected_image_id": "9722_CAM008697_d_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius doris (doris) differs from the three Heliconius timareta (timareta) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_010",
@@ -157,7 +157,7 @@
     "selected_image_id": "11755_CAM040037_v_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius timareta (tristero) differs from the three Heliconius melpomene (rosina) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_011",
@@ -173,7 +173,7 @@
     "selected_image_id": "11830_CAM040083_d_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius melpomene (bellula) differs from the three Heliconius erato (phyllis) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   },
   {
     "task_id": "hf_mimic_012",
@@ -189,6 +189,6 @@
     "selected_image_id": "11531_CAM021049_v_JPG",
     "label": "shape",
     "explanation": "The selected Heliconius wallacei (wallacei) differs from the three Heliconius sara (magdalena) references.",
-    "annotation_color": "#111111"
+    "annotation_color": "#ffb000"
   }
 ]
