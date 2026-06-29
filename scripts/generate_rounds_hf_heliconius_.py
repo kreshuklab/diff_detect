@@ -12,9 +12,12 @@ from typing import Any, Iterable
 
 
 DATASET_URL = "https://huggingface.co/datasets/imageomics/Heliconius-Collection_Cambridge-Butterfly"
+DATASET_ID = "hf_heliconius"
+DATASET_DIR = Path("data") / DATASET_ID
 HELICONIUS_CSV_URL = f"{DATASET_URL}/resolve/main/Heliconius_img_master.csv"
-DEFAULT_OUTPUT = Path("data/rounds.json")
-DEFAULT_SEEDED_OUTPUT = Path("data/seeded_annotations.json")
+DEFAULT_OUTPUT = DATASET_DIR / "rounds.json"
+DEFAULT_SEEDED_OUTPUT = DATASET_DIR / "seeded_annotations.json"
+IMAGE_CACHE_DIR = DATASET_DIR / "images"
 IMAGE_FILE_TYPES = {"jpg", "jpeg", "png"}
 STRICT_RULE = "strict_same_subspecies"
 MIMIC_RULE = "relaxed_same_mimic_group"
@@ -210,6 +213,7 @@ def round_entry(
         "odd_image_id": odd_image_id,
         "images": images,
         "metadata": {
+            "dataset_id": DATASET_ID,
             "dataset": "imageomics/Heliconius-Collection_Cambridge-Butterfly",
             "dataset_url": DATASET_URL,
             "manifest_url": HELICONIUS_CSV_URL,
@@ -238,7 +242,7 @@ def image_entry(row: dict[str, str], role: str) -> dict[str, Any]:
     row_image_id = image_id(row)
     return {
         "image_id": row_image_id,
-        "path": f"data/images/huggingface/{safe_filename(row['filename'])}",
+        "path": (IMAGE_CACHE_DIR / safe_filename(row["filename"])).as_posix(),
         "source_url": row["file_url"],
         "species_role": role,
         "species": row["species"],
@@ -260,11 +264,12 @@ def image_entry(row: dict[str, str], role: str) -> dict[str, Any]:
 def build_seeded_annotations(rounds: list[dict[str, Any]]) -> list[dict[str, str]]:
     labels = {
         "ai": ("color", "#e83e8c"),
-        "peer": ("shape", "#111111"),
+        "peer": ("shape", "#ffb000"),
     }
     annotations = []
     for task in rounds:
         odd_image = next(image for image in task["images"] if image["image_id"] == task["odd_image_id"])
+        reference_count = sum(1 for image in task["images"] if image["species_role"] == "reference")
         metadata = task["metadata"]
         for source, (label, color) in labels.items():
             annotations.append(
@@ -275,7 +280,7 @@ def build_seeded_annotations(rounds: list[dict[str, Any]]) -> list[dict[str, str
                     "label": label,
                     "explanation": (
                         f"The selected {odd_image['species']} ({odd_image['subspecies']}) differs from "
-                        f"the three {metadata['reference_species']} ({metadata['reference_subspecies']}) references."
+                        f"the {reference_count} {metadata['reference_species']} ({metadata['reference_subspecies']}) references."
                     ),
                     "annotation_color": color,
                 }

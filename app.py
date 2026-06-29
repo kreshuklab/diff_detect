@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 import json
 from typing import Any, Literal, cast
 
@@ -10,6 +11,7 @@ from streamlit_drawable_canvas import st_canvas
 
 from models import (
     AnnotationLayers,
+    CanvasJson,
     DifferenceLabel,
     RatingPayload,
     Round,
@@ -21,9 +23,10 @@ from models import (
 from study_storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
-    LABEL_STYLES,
-    LABELS,
-    MIN_ROUNDS,
+    DATASET_ID,
+    DIFFERENCE_LABEL_STYLES,
+    DIFFERENCE_LABELS,
+    N_ROUNDS,
     build_rating_options,
     canvas_has_objects,
     canvas_labels,
@@ -35,9 +38,9 @@ from study_storage import (
     fetch_user_submissions,
     image_for_id,
     label_display,
+    load_image,
     load_rounds,
     load_seeded_annotations,
-    load_wing_image,
     reference_images,
     upsert_rating,
     upsert_submission,
@@ -61,25 +64,25 @@ def inject_annotation_tool_styles() -> None:
             f"""
             div.st-key-annotation_tool_selector
                 div[data-testid="stRadio"] div[role="radiogroup"] > label:nth-child({index}) {{
-                border: 1px solid {LABEL_STYLES[label]["color"]};
+                border: 1px solid {DIFFERENCE_LABEL_STYLES[label]["color"]};
                 border-radius: 8px;
                 padding: 0.38rem 0.7rem;
-                background: {LABEL_STYLES[label]["fill"]};
+                background: {DIFFERENCE_LABEL_STYLES[label]["fill"]};
                 min-width: 6rem;
                 justify-content: center;
             }}
             div.st-key-annotation_tool_selector
                 div[data-testid="stRadio"] div[role="radiogroup"] > label:nth-child({index}):has(input:checked) {{
-                box-shadow: inset 0 0 0 2px {LABEL_STYLES[label]["color"]};
-                background: {LABEL_STYLES[label]["fill"]};
+                box-shadow: inset 0 0 0 2px {DIFFERENCE_LABEL_STYLES[label]["color"]};
+                background: {DIFFERENCE_LABEL_STYLES[label]["fill"]};
             }}
             div.st-key-annotation_tool_selector
                 div[data-testid="stRadio"] div[role="radiogroup"] > label:nth-child({index}) p {{
-                color: {LABEL_STYLES[label]["color"]};
+                color: {DIFFERENCE_LABEL_STYLES[label]["color"]};
                 font-weight: 700;
             }}
             """
-            for index, label in enumerate(LABELS, start=1)
+            for index, label in enumerate(DIFFERENCE_LABELS, start=1)
         ]
     )
     st.markdown(
@@ -112,6 +115,57 @@ def render_image_placeholder(height: int) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_label_chips(labels: list[str] | str | None) -> None:
+    tokens = parse_label_tokens(labels)
+    chips = []
+    for token in tokens:
+        style = DIFFERENCE_LABEL_STYLES.get(cast(Any, token))
+        color = style["color"] if style else "#59636e"
+        fill = style["fill"] if style else "rgba(89, 99, 110, 0.14)"
+        chips.append(
+            f"""
+            <span style="
+                display: inline-flex;
+                align-items: center;
+                border: 1px solid {color};
+                border-radius: 8px;
+                background: {fill};
+                color: {color};
+                font-weight: 700;
+                padding: 0.22rem 0.52rem;
+                line-height: 1.2;
+            ">{html.escape(token)}</span>
+            """
+        )
+
+    st.markdown(
+        f"""
+        <div style="
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4rem;
+            margin: 0.35rem 0 0.45rem;
+        ">
+            <span style="color: rgba(49, 51, 63, 0.75); font-size: 0.875rem;">
+                Label:
+            </span>
+            {"".join(chips)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def parse_label_tokens(labels: list[str] | str | None) -> list[str]:
+    if isinstance(labels, list):
+        return [label.strip() for label in labels if label.strip()]
+    if isinstance(labels, str):
+        tokens = [label.strip() for label in labels.split(",")]
+        return [label for label in tokens if label]
+    return []
 
 
 def init_state() -> None:
@@ -162,12 +216,12 @@ def main() -> None:
     else:
         debug_mode = False
 
-    rounds = choose_rounds(load_rounds(), username, MIN_ROUNDS)
+    rounds = choose_rounds(load_rounds(), username, N_ROUNDS)
     seeded_annotations = load_seeded_annotations()
 
     try:
-        submissions = fetch_user_submissions(supabase, username)
-        ratings = fetch_user_ratings(supabase, username)
+        submissions = fetch_user_submissions(supabase, username, DATASET_ID)
+        ratings = fetch_user_ratings(supabase, username, DATASET_ID)
     except Exception as exc:
         st.error("Failed to load study progress.")
         st.exception(exc)
@@ -235,7 +289,7 @@ def configured_login_form(supabase: SupabaseConnection):
         if "public.users" in message or "PGRST205" in message:
             st.error(
                 "Supabase is connected, but the `public.users` table is missing. "
-                "Apply `supabase/migrations/20260626193000_create_study_tables.sql` or run `schema/supabase.sql` in the Supabase SQL editor."
+                "Run `schema/supabase.sql` in the Supabase SQL editor."
             )
         else:
             st.error(
@@ -248,13 +302,13 @@ def configured_login_form(supabase: SupabaseConnection):
 def render_intro(username: str) -> None:
     st.header(f"Hello {username}!")
     st.write(
-        "You will be shown four sets of butterfly wings, three of which are from the same species. "
+        "You will be shown sets of butterfly wings, all but one of which are from the same species. "
         "Please select the one from a different species."
     )
     st.write(
         "Do not choose the odd one out by a damaged wing or any other non-biological difference."
         f"\nAfter you choose, label your selection to explain why you think it is the different species."
-        f"\nRepeat this for at least {MIN_ROUNDS} rounds."
+        f"\nRepeat this for {N_ROUNDS} rounds."
     )
     if st.button("Start", type="primary"):
         st.session_state.completed_intro = True
@@ -282,10 +336,10 @@ def render_selection_or_annotation(
 
 def render_selection(task: Round, debug_mode: bool) -> None:
     with st.container(key=f"selection_round_{task.task_id}"):
-        st.header("Please select the one of a different species than the other three.")
+        st.header("Please select the one of a different species than the others.")
         render_debug_task_summary(task, debug_mode)
         shuffled_images = list(task.images)
-        columns = st.columns(4)
+        columns = st.columns(len(shuffled_images))
         image_slots = [column.empty() for column in columns]
         for slot in image_slots:
             with slot:
@@ -293,7 +347,7 @@ def render_selection(task: Round, debug_mode: bool) -> None:
 
         for index, image_spec in enumerate(shuffled_images):
             with image_slots[index]:
-                image = load_wing_image(image_spec, size=(360, 250))
+                image = load_image(image_spec, size=(360, 250))
                 st.image(image, width="stretch")
             with columns[index]:
                 render_debug_image_info(image_spec, debug_mode)
@@ -337,7 +391,7 @@ def render_annotation(
                 render_image_placeholder(140)
         for slot, reference in zip(reference_slots, references):
             with slot:
-                st.image(load_wing_image(reference, size=(220, 140)), width="stretch")
+                st.image(load_image(reference, size=(220, 140)), width="stretch")
             render_debug_image_info(reference, debug_mode)
 
     with left:
@@ -348,17 +402,17 @@ def render_annotation(
                 DifferenceLabel,
                 st.radio(
                     "Active difference label",
-                    LABELS,
+                    DIFFERENCE_LABELS,
                     format_func=label_display,
                     horizontal=True,
                 ),
             )
-        style = LABEL_STYLES[label]
+        style = DIFFERENCE_LABEL_STYLES[label]
         canvas_slot = st.empty()
         with canvas_slot:
             render_image_placeholder(CANVAS_HEIGHT)
 
-        selected_image = load_wing_image(selected_spec)
+        selected_image = load_image(selected_spec)
         canvas_kwargs = {
             "fill_color": style["fill"],
             "stroke_width": 8,
@@ -403,21 +457,22 @@ def render_annotation(
                     return
 
                 labels = canvas_labels(current_canvas_json, label)
+                validated_canvas_json = CanvasJson.model_validate(current_canvas_json)
                 composite = composite_annotation(
                     selected_image, canvas_result.image_data
                 )
                 payload = SubmissionPayload(
                     username=username,
+                    dataset_id=DATASET_ID,
                     task_id=task.task_id,
                     selected_image_id=selected_id,
-                    label=labels[0],
                     labels=labels,
                     explanation=explanation.strip() or None,
-                    canvas_json=current_canvas_json,
+                    canvas_json=validated_canvas_json,
                     annotation_layers=AnnotationLayers(
                         mode="single_canvas_color_coded_labels",
                         labels=labels,
-                        canvas_json=current_canvas_json,
+                        canvas_json=validated_canvas_json,
                     ),
                     composite_png_base64=composite,
                 )
@@ -470,7 +525,9 @@ def render_rating(
     }
     task = next(task for task in rounds if task.task_id not in rated_task_ids)
     own_submission = submissions_by_task[task.task_id]
-    peer_submission = fetch_peer_submission(supabase, username, task.task_id)
+    peer_submission = fetch_peer_submission(
+        supabase, username, task.task_id, DATASET_ID
+    )
     options = build_rating_options(
         task, own_submission, peer_submission, seeded_annotations, username
     )
@@ -480,14 +537,14 @@ def render_rating(
     )
     render_debug_task_summary(task, debug_mode)
     with st.container(key=f"rating_round_images_{task.task_id}"):
-        cols = st.columns(4)
+        cols = st.columns(len(task.images))
         image_slots = [column.empty() for column in cols]
         for slot in image_slots:
             with slot:
                 render_image_placeholder(180)
         for index, image_spec in enumerate(task.images):
             with image_slots[index]:
-                st.image(load_wing_image(image_spec, size=(260, 180)), width="stretch")
+                st.image(load_image(image_spec, size=(260, 180)), width="stretch")
             with cols[index]:
                 render_debug_image_info(image_spec, debug_mode)
 
@@ -502,7 +559,7 @@ def render_rating(
             with option_slots[index]:
                 st.image(decode_png(option.composite_png_base64), width="stretch")
             with option_cols[index]:
-                st.caption(f"Label: {label_display(option.label)}")
+                render_label_chips(option.label)
                 if option.explanation:
                     st.write(option.explanation)
                 if st.button(
@@ -512,6 +569,7 @@ def render_rating(
                 ):
                     payload = RatingPayload(
                         username=username,
+                        dataset_id=DATASET_ID,
                         task_id=task.task_id,
                         winner_source=option.source,
                         winner_submission_id=option.submission_id,

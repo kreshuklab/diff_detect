@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 DifferenceLabel = Literal["shape", "color", "texture"]
@@ -34,6 +34,7 @@ class RoundImage(BaseModel):
 
 
 class RoundMetadata(BaseModel):
+    dataset_id: str = ""
     dataset: str = ""
     dataset_url: str = ""
     manifest_url: str = ""
@@ -61,8 +62,8 @@ class Round(BaseModel):
     @model_validator(mode="after")
     def validate_round_images(self) -> "Round":
         odd_images = [image for image in self.images if image.species_role == "odd"]
-        if len(self.images) != 4:
-            raise ValueError("A round must contain exactly four images.")
+        if len(self.images) not in (3, 4):
+            raise ValueError("A round must contain three or four images.")
         if len(odd_images) != 1:
             raise ValueError("A round must contain exactly one odd image.")
         if odd_images[0].image_id != self.odd_image_id:
@@ -79,20 +80,36 @@ class SeededAnnotation(BaseModel):
     annotation_color: str = "#ffb000"
 
 
+class CanvasObject(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str = ""
+    stroke: str | None = None
+    fill: str | None = None
+
+
+class CanvasJson(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    version: str = ""
+    objects: list[CanvasObject] = Field(default_factory=list)
+    background: str | None = None
+
+
 class AnnotationLayers(BaseModel):
     mode: Literal["single_canvas_color_coded_labels"]
     labels: list[DifferenceLabel]
-    canvas_json: dict[str, Any]
+    canvas_json: CanvasJson
 
 
 class SubmissionPayload(BaseModel):
     username: str
+    dataset_id: str
     task_id: str
     selected_image_id: str
-    label: DifferenceLabel
     labels: list[DifferenceLabel]
     explanation: str | None = None
-    canvas_json: dict[str, Any]
+    canvas_json: CanvasJson
     annotation_layers: AnnotationLayers
     composite_png_base64: str
 
@@ -107,6 +124,7 @@ class SubmissionPayload(BaseModel):
 class RatingOption(BaseModel):
     option_id: str
     source: WinnerSource
+    dataset_id: str
     task_id: str
     selected_image_id: str
     label: str
@@ -117,6 +135,7 @@ class RatingOption(BaseModel):
 
 class RatingPayload(BaseModel):
     username: str
+    dataset_id: str
     task_id: str
     winner_source: WinnerSource
     winner_submission_id: str | None = None

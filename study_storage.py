@@ -16,6 +16,7 @@ from PIL import Image, ImageDraw
 from pydantic import TypeAdapter
 
 from models import (
+    CanvasJson,
     DifferenceLabel,
     RatingOption,
     RatingPayload,
@@ -26,20 +27,21 @@ from models import (
 )
 
 ROOT = Path(__file__).resolve().parent
-ROUND_MANIFEST = ROOT / "data" / "rounds.json"
-SEEDED_ANNOTATIONS = ROOT / "data" / "seeded_annotations.json"
+DATASET_ID = "hf_heliconius"
+DATASET_ROOT = ROOT / "data" / DATASET_ID
+ROUND_MANIFEST = DATASET_ROOT / "rounds.json"
+SEEDED_ANNOTATIONS = DATASET_ROOT / "seeded_annotations.json"
 CANVAS_WIDTH = 680
 CANVAS_HEIGHT = 420
-MIN_ROUNDS = 5
+N_ROUNDS = 5
 
 
-LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
+DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
     "shape": {"color": "#ffb000", "fill": "rgba(255, 176, 0, 0.2)"},
     "color": {"color": "#e83e8c", "fill": "rgba(232, 62, 140, 0.18)"},
     "texture": {"color": "#006d77", "fill": "rgba(0, 109, 119, 0.18)"},
 }
-LEGACY_LABEL_COLORS: dict[str, DifferenceLabel] = {"#111111": "shape"}
-LABELS: tuple[DifferenceLabel, ...] = tuple(LABEL_STYLES)
+DIFFERENCE_LABELS: tuple[DifferenceLabel, ...] = tuple(DIFFERENCE_LABEL_STYLES)
 
 
 ROUND_LIST_ADAPTER = TypeAdapter(list[Round])
@@ -57,7 +59,7 @@ def load_seeded_annotations(path: Path = SEEDED_ANNOTATIONS) -> list[SeededAnnot
 
 
 def choose_rounds(
-    rounds: list[Round], username: str, limit: int = MIN_ROUNDS
+    rounds: list[Round], username: str, limit: int = N_ROUNDS
 ) -> list[Round]:
     selected = list(rounds)
     random.Random(username).shuffle(selected)
@@ -75,7 +77,7 @@ def reference_images(task: Round, selected_image_id: str) -> list[RoundImage]:
     return [image for image in task.images if image.image_id != selected_image_id]
 
 
-def load_wing_image(
+def load_image(
     image_spec: RoundImage | dict[str, Any],
     size: tuple[int, int] = (CANVAS_WIDTH, CANVAS_HEIGHT),
 ) -> Image.Image:
@@ -92,13 +94,13 @@ def load_wing_image(
             path.unlink(missing_ok=True)
     if image.source_url:
         try:
-            return load_remote_wing_image(image.source_url, path, size)
+            return load_remote_image(image.source_url, path, size)
         except Exception:
             pass
-    return placeholder_wing_image(image.image_id, image.species_role, size)
+    return placeholder_image(image.image_id, image.species_role, size)
 
 
-def load_remote_wing_image(
+def load_remote_image(
     source_url: str, cache_path: Path, size: tuple[int, int]
 ) -> Image.Image:
     image_bytes = download_image_bytes(source_url)
@@ -121,7 +123,7 @@ def download_image_bytes(source_url: str) -> bytes:
         return response.read()
 
 
-def placeholder_wing_image(
+def placeholder_image(
     image_id: str, species_role: str, size: tuple[int, int]
 ) -> Image.Image:
     width, height = size
@@ -198,12 +200,13 @@ def composite_annotation(background: Image.Image, overlay_data: Any) -> str:
 
 def seeded_rating_option(seed: SeededAnnotation, task: Round) -> RatingOption:
     selected = image_for_id(task, seed.selected_image_id)
-    background = load_wing_image(selected)
-    color = seed.annotation_color or LABEL_STYLES[seed.label]["color"]
+    background = load_image(selected)
+    color = seed.annotation_color or DIFFERENCE_LABEL_STYLES[seed.label]["color"]
     composite = synthetic_annotation(background, color, seed.label)
     return RatingOption(
         option_id=f"{seed.source}:{seed.task_id}:{seed.label}",
         source=seed.source,
+        dataset_id=task.metadata.dataset_id or DATASET_ID,
         task_id=seed.task_id,
         selected_image_id=seed.selected_image_id,
         label=seed.label,
@@ -256,24 +259,23 @@ def hex_to_rgb(value: str) -> tuple[int, int, int]:
     )
 
 
-def canvas_has_objects(canvas_json: dict[str, Any] | None) -> bool:
-    return bool(canvas_json and canvas_json.get("objects"))
+def canvas_has_objects(canvas_json: CanvasJson | dict[str, Any] | None) -> bool:
+    return bool(canvas_object_dicts(canvas_json))
 
 
 def canvas_labels(
-    canvas_json: dict[str, Any] | None, fallback_label: DifferenceLabel | None = None
+    canvas_json: CanvasJson | dict[str, Any] | None,
+    fallback_label: DifferenceLabel | None = None,
 ) -> list[DifferenceLabel]:
     if not canvas_json:
         return [fallback_label] if fallback_label else []
 
     label_by_color: dict[str, DifferenceLabel] = {
-        style["color"].lower(): label for label, style in LABEL_STYLES.items()
+        style["color"].lower(): label
+        for label, style in DIFFERENCE_LABEL_STYLES.items()
     }
-    label_by_color.update(LEGACY_LABEL_COLORS)
     labels: list[DifferenceLabel] = []
-    for item in canvas_json.get("objects", []):
-        if not isinstance(item, dict):
-            continue
+    for item in canvas_object_dicts(canvas_json):
         stroke = str(item.get("stroke", "")).lower()
         label = label_by_color.get(stroke)
         if label and label not in labels:
@@ -282,6 +284,18 @@ def canvas_labels(
     if not labels and fallback_label and canvas_has_objects(canvas_json):
         labels.append(fallback_label)
     return labels
+
+
+def canvas_object_dicts(
+    canvas_json: CanvasJson | dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if canvas_json is None:
+        return []
+    if isinstance(canvas_json, CanvasJson):
+        return [item.model_dump(mode="json") for item in canvas_json.objects]
+
+    objects = canvas_json.get("objects", [])
+    return [item for item in objects if isinstance(item, dict)]
 
 
 def label_display(labels: list[str] | str | None) -> str:
@@ -295,37 +309,52 @@ def table_rows(response: Any) -> list[dict[str, Any]]:
     return data if isinstance(data, list) else []
 
 
-def fetch_user_submissions(supabase: Any, username: str) -> list[dict[str, Any]]:
+def fetch_user_submissions(
+    supabase: Any, username: str, dataset_id: str = DATASET_ID
+) -> list[dict[str, Any]]:
     response = (
-        supabase.table("submissions").select("*").eq("username", username).execute()
+        supabase.table("submissions")
+        .select("*")
+        .eq("username", username)
+        .eq("dataset_id", dataset_id)
+        .execute()
     )
     return table_rows(response)
 
 
-def fetch_user_ratings(supabase: Any, username: str) -> list[dict[str, Any]]:
-    response = supabase.table("ratings").select("*").eq("username", username).execute()
+def fetch_user_ratings(
+    supabase: Any, username: str, dataset_id: str = DATASET_ID
+) -> list[dict[str, Any]]:
+    response = (
+        supabase.table("ratings")
+        .select("*")
+        .eq("username", username)
+        .eq("dataset_id", dataset_id)
+        .execute()
+    )
     return table_rows(response)
 
 
 def upsert_submission(supabase: Any, payload: SubmissionPayload) -> None:
     supabase.table("submissions").upsert(
-        payload.model_dump(mode="json"), on_conflict="username,task_id"
+        payload.model_dump(mode="json"), on_conflict="username,dataset_id,task_id"
     ).execute()
 
 
 def upsert_rating(supabase: Any, payload: RatingPayload) -> None:
     supabase.table("ratings").upsert(
-        payload.model_dump(mode="json"), on_conflict="username,task_id"
+        payload.model_dump(mode="json"), on_conflict="username,dataset_id,task_id"
     ).execute()
 
 
 def fetch_peer_submission(
-    supabase: Any, username: str, task_id: str
+    supabase: Any, username: str, task_id: str, dataset_id: str = DATASET_ID
 ) -> dict[str, Any] | None:
     response = (
         supabase.table("submissions")
         .select("*")
         .eq("task_id", task_id)
+        .eq("dataset_id", dataset_id)
         .neq("username", username)
         .limit(1)
         .execute()
@@ -350,11 +379,14 @@ def build_rating_options(
         RatingOption(
             option_id=f"self:{task_id}",
             source="self",
+            dataset_id=(
+                own_submission.get("dataset_id")
+                or task.metadata.dataset_id
+                or DATASET_ID
+            ),
             task_id=task_id,
             selected_image_id=own_submission["selected_image_id"],
-            label=label_display(
-                own_submission.get("labels") or own_submission["label"]
-            ),
+            label=label_display(own_submission["labels"]),
             explanation=own_submission.get("explanation") or "",
             composite_png_base64=own_submission["composite_png_base64"],
             submission_id=str(own_submission.get("id") or f"{username}:{task_id}"),
@@ -366,11 +398,14 @@ def build_rating_options(
             RatingOption(
                 option_id=f"peer:{peer_submission.get('id', task_id)}",
                 source="peer",
+                dataset_id=(
+                    peer_submission.get("dataset_id")
+                    or task.metadata.dataset_id
+                    or DATASET_ID
+                ),
                 task_id=task_id,
                 selected_image_id=peer_submission["selected_image_id"],
-                label=label_display(
-                    peer_submission.get("labels") or peer_submission["label"]
-                ),
+                label=label_display(peer_submission["labels"]),
                 explanation=peer_submission.get("explanation") or "",
                 composite_png_base64=peer_submission["composite_png_base64"],
                 submission_id=str(peer_submission.get("id") or ""),

@@ -5,7 +5,7 @@
     "images": [
       {
         "image_id": "25367_16011v_JPG",
-        "path": "data/images/huggingface/25367_16011v.JPG",
+        "path": "data/hf_heliconius/images/25367_16011v.JPG",
         "source_url": "https://zenodo.org/record/2552371/files/16011v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -24,7 +24,7 @@
       },
       {
         "image_id": "26080_Hpard_ssp_nov_09_387_jpg",
-        "path": "data/images/huggingface/26080_Hpard_ssp_nov_09-387.jpg",
+        "path": "data/hf_heliconius/images/26080_Hpard_ssp_nov_09-387.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/Hpard_ssp_nov_09-387.jpg",
         "species_role": "odd",
         "species": "Heliconius pardalinus",
@@ -43,7 +43,7 @@
       },
       {
         "image_id": "25386_16204v_JPG",
-        "path": "data/images/huggingface/25386_16204v.JPG",
+        "path": "data/hf_heliconius/images/25386_16204v.JPG",
         "source_url": "https://zenodo.org/record/2552371/files/16204v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -62,7 +62,7 @@
       },
       {
         "image_id": "5007_CAM017378_v_JPG",
-        "path": "data/images/huggingface/5007_CAM017378_v.JPG",
+        "path": "data/hf_heliconius/images/5007_CAM017378_v.JPG",
         "source_url": "https://zenodo.org/record/3082688/files/CAM017378_v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -96,7 +96,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": true,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -105,7 +106,7 @@
     "images": [
       {
         "image_id": "41027_CS003617_d_JPG",
-        "path": "data/images/huggingface/41027_CS003617_d.JPG",
+        "path": "data/hf_heliconius/images/41027_CS003617_d.JPG",
         "source_url": "https://zenodo.org/record/2735056/files/CS003617_d.JPG",
         "species_role": "odd",
         "species": "Heliconius melpomene",
@@ -124,7 +125,7 @@
       },
       {
         "image_id": "10297_CAM009164_d_JPG",
-        "path": "data/images/huggingface/10297_CAM009164_d.JPG",
+        "path": "data/hf_heliconius/images/10297_CAM009164_d.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM009164_d.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -143,7 +144,7 @@
       },
       {
         "image_id": "9404_CAM008521_d_JPG",
-        "path": "data/images/huggingface/9404_CAM008521_d.JPG",
+        "path": "data/hf_heliconius/images/9404_CAM008521_d.JPG",
         "source_url": "https://zenodo.org/record/2684906/files/CAM008521_d.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -162,7 +163,7 @@
       },
       {
         "image_id": "26071_9178_H_timareta_timareta_D_JPG_jpg",
-        "path": "data/images/huggingface/26071_9178_H_timareta_timareta_D.JPG.jpg",
+        "path": "data/hf_heliconius/images/26071_9178_H_timareta_timareta_D.JPG.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/9178_H_timareta_timareta_D.JPG.jpg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -196,7 +197,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -205,7 +207,7 @@
     "images": [
       {
         "image_id": "26040_13566_H_m_thelxiopeia_V_JPG_jpg",
-        "path": "data/images/huggingface/26040_13566_H_m_thelxiopeia_V.JPG.jpg",
+        "path": "data/hf_heliconius/images/26040_13566_H_m_thelxiopeia_V.JPG.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/13566_H_m_thelxiopeia_V.JPG.jpg",
         "species_role": "odd",
         "species": "Heliconius melpomene",
@@ -224,7 +226,7 @@
       },
       {
         "image_id": "26056_8520_V_jpg",
-        "path": "data/images/huggingface/26056_8520_V.jpg",
+        "path": "data/hf_heliconius/images/26056_8520_V.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/8520_V.jpg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -243,7 +245,7 @@
       },
       {
         "image_id": "26075_DSC_0697_jpg",
-        "path": "data/images/huggingface/26075_DSC_0697.jpg",
+        "path": "data/hf_heliconius/images/26075_DSC_0697.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/DSC_0697.jpg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -262,7 +264,7 @@
       },
       {
         "image_id": "25286_8520v_jpg",
-        "path": "data/images/huggingface/25286_8520v.jpg",
+        "path": "data/hf_heliconius/images/25286_8520v.jpg",
         "source_url": "https://zenodo.org/record/2552371/files/8520v.jpg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -296,7 +298,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -305,7 +308,7 @@
     "images": [
       {
         "image_id": "25743_CS2394_dorsal_jpeg",
-        "path": "data/images/huggingface/25743_CS2394_dorsal.jpeg",
+        "path": "data/hf_heliconius/images/25743_CS2394_dorsal.jpeg",
         "source_url": "https://zenodo.org/record/2553501/files/CS2394 dorsal.jpeg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -324,7 +327,7 @@
       },
       {
         "image_id": "39064_CAM041523_d_JPG",
-        "path": "data/images/huggingface/39064_CAM041523_d.JPG",
+        "path": "data/hf_heliconius/images/39064_CAM041523_d.JPG",
         "source_url": "https://zenodo.org/record/4291095/files/CAM041523_d.JPG",
         "species_role": "odd",
         "species": "Heliconius elevatus",
@@ -343,7 +346,7 @@
       },
       {
         "image_id": "25705_CS2333_dorsal_jpeg",
-        "path": "data/images/huggingface/25705_CS2333_dorsal.jpeg",
+        "path": "data/hf_heliconius/images/25705_CS2333_dorsal.jpeg",
         "source_url": "https://zenodo.org/record/2553501/files/CS2333 dorsal.jpeg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -362,7 +365,7 @@
       },
       {
         "image_id": "25703_CS2327_dorsal_jpeg",
-        "path": "data/images/huggingface/25703_CS2327_dorsal.jpeg",
+        "path": "data/hf_heliconius/images/25703_CS2327_dorsal.jpeg",
         "source_url": "https://zenodo.org/record/2553501/files/CS2327 dorsal.jpeg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -396,7 +399,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -405,7 +409,7 @@
     "images": [
       {
         "image_id": "6226_CAM000197_v_JPG",
-        "path": "data/images/huggingface/6226_CAM000197_v.JPG",
+        "path": "data/hf_heliconius/images/6226_CAM000197_v.JPG",
         "source_url": "https://zenodo.org/record/2677821/files/CAM000197_v.JPG",
         "species_role": "odd",
         "species": "Heliconius eleuchia",
@@ -424,7 +428,7 @@
       },
       {
         "image_id": "12465_CAM040426_v_JPG",
-        "path": "data/images/huggingface/12465_CAM040426_v.JPG",
+        "path": "data/hf_heliconius/images/12465_CAM040426_v.JPG",
         "source_url": "https://zenodo.org/record/2707828/files/CAM040426_v.JPG",
         "species_role": "reference",
         "species": "Heliconius cydno",
@@ -443,7 +447,7 @@
       },
       {
         "image_id": "12473_CAM040430_v_JPG",
-        "path": "data/images/huggingface/12473_CAM040430_v.JPG",
+        "path": "data/hf_heliconius/images/12473_CAM040430_v.JPG",
         "source_url": "https://zenodo.org/record/2707828/files/CAM040430_v.JPG",
         "species_role": "reference",
         "species": "Heliconius cydno",
@@ -462,7 +466,7 @@
       },
       {
         "image_id": "12385_CAM040385_v_JPG",
-        "path": "data/images/huggingface/12385_CAM040385_v.JPG",
+        "path": "data/hf_heliconius/images/12385_CAM040385_v.JPG",
         "source_url": "https://zenodo.org/record/2707828/files/CAM040385_v.JPG",
         "species_role": "reference",
         "species": "Heliconius cydno",
@@ -496,7 +500,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -505,7 +510,7 @@
     "images": [
       {
         "image_id": "25368_16037d3_JPG",
-        "path": "data/images/huggingface/25368_16037d3.JPG",
+        "path": "data/hf_heliconius/images/25368_16037d3.JPG",
         "source_url": "https://zenodo.org/record/2552371/files/16037d3.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -524,7 +529,7 @@
       },
       {
         "image_id": "20383_19N1484_d_JPG",
-        "path": "data/images/huggingface/20383_19N1484_d.JPG",
+        "path": "data/hf_heliconius/images/20383_19N1484_d.JPG",
         "source_url": "https://zenodo.org/record/4288311/files/19N1484_d.JPG",
         "species_role": "odd",
         "species": "Heliconius elevatus",
@@ -543,7 +548,7 @@
       },
       {
         "image_id": "3326_CAM016217_d_JPG",
-        "path": "data/images/huggingface/3326_CAM016217_d.JPG",
+        "path": "data/hf_heliconius/images/3326_CAM016217_d.JPG",
         "source_url": "https://zenodo.org/record/3082688/files/CAM016217_d.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -562,7 +567,7 @@
       },
       {
         "image_id": "25374_16200d2_JPG",
-        "path": "data/images/huggingface/25374_16200d2.JPG",
+        "path": "data/hf_heliconius/images/25374_16200d2.JPG",
         "source_url": "https://zenodo.org/record/2552371/files/16200d2.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -596,7 +601,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -605,7 +611,7 @@
     "images": [
       {
         "image_id": "25556_16782v_JPG",
-        "path": "data/images/huggingface/25556_16782v.JPG",
+        "path": "data/hf_heliconius/images/25556_16782v.JPG",
         "source_url": "https://zenodo.org/record/2552371/files/16782v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -624,7 +630,7 @@
       },
       {
         "image_id": "3321_CAM016210_v_JPG",
-        "path": "data/images/huggingface/3321_CAM016210_v.JPG",
+        "path": "data/hf_heliconius/images/3321_CAM016210_v.JPG",
         "source_url": "https://zenodo.org/record/3082688/files/CAM016210_v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -643,7 +649,7 @@
       },
       {
         "image_id": "9733_CAM008702_v_JPG",
-        "path": "data/images/huggingface/9733_CAM008702_v.JPG",
+        "path": "data/hf_heliconius/images/9733_CAM008702_v.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM008702_v.JPG",
         "species_role": "odd",
         "species": "Heliconius melpomene",
@@ -662,7 +668,7 @@
       },
       {
         "image_id": "4313_CAM016971_v_JPG",
-        "path": "data/images/huggingface/4313_CAM016971_v.JPG",
+        "path": "data/hf_heliconius/images/4313_CAM016971_v.JPG",
         "source_url": "https://zenodo.org/record/3082688/files/CAM016971_v.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -696,7 +702,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -705,7 +712,7 @@
     "images": [
       {
         "image_id": "38926_CAM041488_v_JPG",
-        "path": "data/images/huggingface/38926_CAM041488_v.JPG",
+        "path": "data/hf_heliconius/images/38926_CAM041488_v.JPG",
         "source_url": "https://zenodo.org/record/4291095/files/CAM041488_v.JPG",
         "species_role": "reference",
         "species": "Heliconius wallacei",
@@ -724,7 +731,7 @@
       },
       {
         "image_id": "13942_CAM041152_v_JPG",
-        "path": "data/images/huggingface/13942_CAM041152_v.JPG",
+        "path": "data/hf_heliconius/images/13942_CAM041152_v.JPG",
         "source_url": "https://zenodo.org/record/2714333/files/CAM041152_v.JPG",
         "species_role": "reference",
         "species": "Heliconius wallacei",
@@ -743,7 +750,7 @@
       },
       {
         "image_id": "9800_CAM008736_v_JPG",
-        "path": "data/images/huggingface/9800_CAM008736_v.JPG",
+        "path": "data/hf_heliconius/images/9800_CAM008736_v.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM008736_v.JPG",
         "species_role": "odd",
         "species": "Heliconius doris",
@@ -762,7 +769,7 @@
       },
       {
         "image_id": "11529_CAM021048_v_JPG",
-        "path": "data/images/huggingface/11529_CAM021048_v.JPG",
+        "path": "data/hf_heliconius/images/11529_CAM021048_v.JPG",
         "source_url": "https://zenodo.org/record/2702457/files/CAM021048_v.JPG",
         "species_role": "reference",
         "species": "Heliconius wallacei",
@@ -796,7 +803,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -805,7 +813,7 @@
     "images": [
       {
         "image_id": "26055_8520_D_jpg",
-        "path": "data/images/huggingface/26055_8520_D.jpg",
+        "path": "data/hf_heliconius/images/26055_8520_D.jpg",
         "source_url": "https://zenodo.org/record/2553977/files/8520_D.jpg",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -824,7 +832,7 @@
       },
       {
         "image_id": "9722_CAM008697_d_JPG",
-        "path": "data/images/huggingface/9722_CAM008697_d.JPG",
+        "path": "data/hf_heliconius/images/9722_CAM008697_d.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM008697_d.JPG",
         "species_role": "odd",
         "species": "Heliconius doris",
@@ -843,7 +851,7 @@
       },
       {
         "image_id": "10247_CAM009139_d_JPG",
-        "path": "data/images/huggingface/10247_CAM009139_d.JPG",
+        "path": "data/hf_heliconius/images/10247_CAM009139_d.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM009139_d.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -862,7 +870,7 @@
       },
       {
         "image_id": "10414_CAM009223_d_JPG",
-        "path": "data/images/huggingface/10414_CAM009223_d.JPG",
+        "path": "data/hf_heliconius/images/10414_CAM009223_d.JPG",
         "source_url": "https://zenodo.org/record/2686762/files/CAM009223_d.JPG",
         "species_role": "reference",
         "species": "Heliconius timareta",
@@ -896,7 +904,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -905,7 +914,7 @@
     "images": [
       {
         "image_id": "7349_CAM000894_v_JPG",
-        "path": "data/images/huggingface/7349_CAM000894_v.JPG",
+        "path": "data/hf_heliconius/images/7349_CAM000894_v.JPG",
         "source_url": "https://zenodo.org/record/2682458/files/CAM000894_v.JPG",
         "species_role": "reference",
         "species": "Heliconius melpomene",
@@ -924,7 +933,7 @@
       },
       {
         "image_id": "6809_CAM000610_v_JPG",
-        "path": "data/images/huggingface/6809_CAM000610_v.JPG",
+        "path": "data/hf_heliconius/images/6809_CAM000610_v.JPG",
         "source_url": "https://zenodo.org/record/2682458/files/CAM000610_v.JPG",
         "species_role": "reference",
         "species": "Heliconius melpomene",
@@ -943,7 +952,7 @@
       },
       {
         "image_id": "7247_CAM000843_v_JPG",
-        "path": "data/images/huggingface/7247_CAM000843_v.JPG",
+        "path": "data/hf_heliconius/images/7247_CAM000843_v.JPG",
         "source_url": "https://zenodo.org/record/2682458/files/CAM000843_v.JPG",
         "species_role": "reference",
         "species": "Heliconius melpomene",
@@ -962,7 +971,7 @@
       },
       {
         "image_id": "11755_CAM040037_v_JPG",
-        "path": "data/images/huggingface/11755_CAM040037_v.JPG",
+        "path": "data/hf_heliconius/images/11755_CAM040037_v.JPG",
         "source_url": "https://zenodo.org/record/2707828/files/CAM040037_v.JPG",
         "species_role": "odd",
         "species": "Heliconius timareta",
@@ -996,7 +1005,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -1005,7 +1015,7 @@
     "images": [
       {
         "image_id": "42547_CAM036607_d_JPG",
-        "path": "data/images/huggingface/42547_CAM036607_d.JPG",
+        "path": "data/hf_heliconius/images/42547_CAM036607_d.JPG",
         "source_url": "https://zenodo.org/record/5561246/files/CAM036607_d.JPG",
         "species_role": "reference",
         "species": "Heliconius erato",
@@ -1024,7 +1034,7 @@
       },
       {
         "image_id": "11830_CAM040083_d_JPG",
-        "path": "data/images/huggingface/11830_CAM040083_d.JPG",
+        "path": "data/hf_heliconius/images/11830_CAM040083_d.JPG",
         "source_url": "https://zenodo.org/record/2707828/files/CAM040083_d.JPG",
         "species_role": "odd",
         "species": "Heliconius melpomene",
@@ -1043,7 +1053,7 @@
       },
       {
         "image_id": "42375_CAM036540_d_JPG",
-        "path": "data/images/huggingface/42375_CAM036540_d.JPG",
+        "path": "data/hf_heliconius/images/42375_CAM036540_d.JPG",
         "source_url": "https://zenodo.org/record/5561246/files/CAM036540_d.JPG",
         "species_role": "reference",
         "species": "Heliconius erato",
@@ -1062,7 +1072,7 @@
       },
       {
         "image_id": "42503_CAM036584_d_JPG",
-        "path": "data/images/huggingface/42503_CAM036584_d.JPG",
+        "path": "data/hf_heliconius/images/42503_CAM036584_d.JPG",
         "source_url": "https://zenodo.org/record/5561246/files/CAM036584_d.JPG",
         "species_role": "reference",
         "species": "Heliconius erato",
@@ -1096,7 +1106,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   },
   {
@@ -1105,7 +1116,7 @@
     "images": [
       {
         "image_id": "11531_CAM021049_v_JPG",
-        "path": "data/images/huggingface/11531_CAM021049_v.JPG",
+        "path": "data/hf_heliconius/images/11531_CAM021049_v.JPG",
         "source_url": "https://zenodo.org/record/2702457/files/CAM021049_v.JPG",
         "species_role": "odd",
         "species": "Heliconius wallacei",
@@ -1124,7 +1135,7 @@
       },
       {
         "image_id": "38614_CAM041410_v_JPG",
-        "path": "data/images/huggingface/38614_CAM041410_v.JPG",
+        "path": "data/hf_heliconius/images/38614_CAM041410_v.JPG",
         "source_url": "https://zenodo.org/record/4291095/files/CAM041410_v.JPG",
         "species_role": "reference",
         "species": "Heliconius sara",
@@ -1143,7 +1154,7 @@
       },
       {
         "image_id": "38878_CAM041477_v_JPG",
-        "path": "data/images/huggingface/38878_CAM041477_v.JPG",
+        "path": "data/hf_heliconius/images/38878_CAM041477_v.JPG",
         "source_url": "https://zenodo.org/record/4291095/files/CAM041477_v.JPG",
         "species_role": "reference",
         "species": "Heliconius sara",
@@ -1162,7 +1173,7 @@
       },
       {
         "image_id": "39238_CAM041567_v_JPG",
-        "path": "data/images/huggingface/39238_CAM041567_v.JPG",
+        "path": "data/hf_heliconius/images/39238_CAM041567_v.JPG",
         "source_url": "https://zenodo.org/record/4291095/files/CAM041567_v.JPG",
         "species_role": "reference",
         "species": "Heliconius sara",
@@ -1196,7 +1207,8 @@
       "hybrid_stat": "non-hybrid",
       "references_share_subspecies": true,
       "all_four_share_subspecies": false,
-      "all_four_share_mimic_group": true
+      "all_four_share_mimic_group": true,
+      "dataset_id": "hf_heliconius"
     }
   }
 ]

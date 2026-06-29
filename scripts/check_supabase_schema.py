@@ -10,10 +10,13 @@ REQUIRED_TABLES = ("users", "submissions", "ratings")
 REQUIRED_SELECTS = {
     "users": "username,password",
     "submissions": (
-        "username,task_id,selected_image_id,label,labels,explanation,"
+        "username,dataset_id,task_id,selected_image_id,labels,explanation,"
         "canvas_json,annotation_layers,composite_png_base64,created_at"
     ),
-    "ratings": "username,task_id,winner_source,winner_submission_id,option_payload,created_at",
+    "ratings": (
+        "username,dataset_id,task_id,winner_source,winner_submission_id,"
+        "option_payload,created_at"
+    ),
 }
 
 
@@ -45,7 +48,7 @@ def main() -> None:
         for table_name, error in missing:
             print(f"- public.{table_name}: {error}")
         print(
-            "Apply the migrations in supabase/migrations/ or run schema/supabase.sql in the Supabase SQL editor."
+            "Run schema/supabase.sql in the Supabase SQL editor."
         )
         raise SystemExit(1)
 
