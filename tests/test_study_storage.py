@@ -1,30 +1,74 @@
-from models import CanvasJson, Round
-from study_storage import (
+from diff_detect.models import CanvasJson, Round
+from diff_detect.study_storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
-    DATASET_ID,
+    DATASET_ID_ENV_VAR,
+    DEFAULT_DATASET_ID,
     DIFFERENCE_LABEL_STYLES,
-    N_ROUNDS,
+    available_dataset_ids,
     build_rating_options,
     canvas_has_objects,
     canvas_labels,
     choose_rounds,
+    completed_task_ids,
+    configured_dataset_id,
     load_image,
     load_rounds,
     load_seeded_annotations,
+    normalize_dataset_id,
 )
 
 
 def test_choose_rounds_is_stable_for_user():
     rounds = load_rounds()
-    first = [task.task_id for task in choose_rounds(rounds, "ada")]
-    second = [task.task_id for task in choose_rounds(rounds, "ada")]
+    first = [task.task_id for task in choose_rounds(rounds, "ada", DEFAULT_DATASET_ID)]
+    second = [task.task_id for task in choose_rounds(rounds, "ada", DEFAULT_DATASET_ID)]
     assert first == second
-    assert len(first) == N_ROUNDS
+    assert set(first) == {task.task_id for task in rounds}
+    assert len(first) == len(rounds)
+
+
+def test_completed_task_ids_ignore_duplicates_and_unknown_tasks():
+    rows = [
+        {"task_id": "round_1"},
+        {"task_id": "round_1"},
+        {"task_id": "old_round"},
+        {"task_id": None},
+        {},
+    ]
+
+    assert completed_task_ids(rows, {"round_1", "round_2"}) == {"round_1"}
 
 
 def test_default_rounds_use_active_dataset_id():
-    assert {task.metadata.dataset_id for task in load_rounds()} == {DATASET_ID}
+    assert {task.metadata.dataset_id for task in load_rounds()} == {DEFAULT_DATASET_ID}
+
+
+def test_configured_dataset_id_uses_environment_override(monkeypatch):
+    monkeypatch.setenv(DATASET_ID_ENV_VAR, "env_dataset")
+    assert configured_dataset_id("explicit_dataset") == "env_dataset"
+    assert configured_dataset_id() == "env_dataset"
+    monkeypatch.delenv(DATASET_ID_ENV_VAR)
+    assert configured_dataset_id("explicit_dataset") == "explicit_dataset"
+
+
+def test_normalize_dataset_id_rejects_paths():
+    assert normalize_dataset_id(" hf_heliconius ") == DEFAULT_DATASET_ID
+    for dataset_id in ("", "../other", "nested/dataset", "."):
+        try:
+            normalize_dataset_id(dataset_id)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Expected {dataset_id!r} to be rejected")
+
+
+def test_available_dataset_ids_include_default_dataset():
+    assert DEFAULT_DATASET_ID in available_dataset_ids()
+
+
+def test_seeded_annotations_are_optional_for_datasets(tmp_path):
+    assert load_seeded_annotations(path=tmp_path / "seeded_annotations.json") == []
 
 
 def test_placeholder_images_match_canvas_size():
@@ -100,7 +144,7 @@ def test_rating_options_include_self_peer_and_ai_with_fallback():
     )
 
     assert sorted(option.source for option in options) == ["ai", "peer", "self"]
-    assert {option.dataset_id for option in options} == {DATASET_ID}
+    assert {option.dataset_id for option in options} == {DEFAULT_DATASET_ID}
 
 
 def test_round_model_allows_three_or_four_images():

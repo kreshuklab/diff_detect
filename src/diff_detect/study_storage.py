@@ -4,6 +4,7 @@ import base64
 import hashlib
 import io
 import json
+import os
 import random
 import urllib.parse
 import urllib.request
@@ -15,7 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from pydantic import TypeAdapter
 
-from models import (
+from diff_detect.models import (
     CanvasJson,
     DifferenceLabel,
     RatingOption,
@@ -26,14 +27,14 @@ from models import (
     SubmissionPayload,
 )
 
-ROOT = Path(__file__).resolve().parent
-DATASET_ID = "hf_heliconius"
-DATASET_ROOT = ROOT / "data" / DATASET_ID
-ROUND_MANIFEST = DATASET_ROOT / "rounds.json"
-SEEDED_ANNOTATIONS = DATASET_ROOT / "seeded_annotations.json"
+ROOT = Path(__file__).resolve().parents[2]
+DATA_ROOT = ROOT / "data"
+DEFAULT_DATASET_ID = "hf_heliconius"
+DATASET_ID_ENV_VAR = "DIFF_DETECT_DATASET_ID"
+ROUND_MANIFEST_FILENAME = "rounds.json"
+SEEDED_ANNOTATIONS_FILENAME = "seeded_annotations.json"
 CANVAS_WIDTH = 680
 CANVAS_HEIGHT = 420
-N_ROUNDS = 5
 
 
 DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
@@ -48,22 +49,78 @@ ROUND_LIST_ADAPTER = TypeAdapter(list[Round])
 SEEDED_ANNOTATION_LIST_ADAPTER = TypeAdapter(list[SeededAnnotation])
 
 
-def load_rounds(path: Path = ROUND_MANIFEST) -> list[Round]:
-    with path.open("r", encoding="utf-8") as handle:
+def configured_dataset_id(configured: str | None = None) -> str:
+    value = os.environ.get(DATASET_ID_ENV_VAR) or configured or DEFAULT_DATASET_ID
+    return normalize_dataset_id(value)
+
+
+def normalize_dataset_id(dataset_id: str) -> str:
+    normalized = dataset_id.strip()
+    if not normalized:
+        raise ValueError("Dataset id cannot be empty.")
+    if normalized != Path(normalized).name or normalized in {".", ".."}:
+        raise ValueError("Dataset id must be a directory name under data/.")
+    return normalized
+
+
+def dataset_root(dataset_id: str = DEFAULT_DATASET_ID) -> Path:
+    return DATA_ROOT / normalize_dataset_id(dataset_id)
+
+
+def round_manifest_path(dataset_id: str = DEFAULT_DATASET_ID) -> Path:
+    return dataset_root(dataset_id) / ROUND_MANIFEST_FILENAME
+
+
+def seeded_annotations_path(dataset_id: str = DEFAULT_DATASET_ID) -> Path:
+    return dataset_root(dataset_id) / SEEDED_ANNOTATIONS_FILENAME
+
+
+def available_dataset_ids(data_root: Path = DATA_ROOT) -> list[str]:
+    if not data_root.exists():
+        return []
+    return sorted(
+        path.name
+        for path in data_root.iterdir()
+        if path.is_dir() and (path / ROUND_MANIFEST_FILENAME).is_file()
+    )
+
+
+def load_rounds(
+    dataset_id: str = DEFAULT_DATASET_ID, path: Path | None = None
+) -> list[Round]:
+    manifest_path = path or round_manifest_path(dataset_id)
+    with manifest_path.open("r", encoding="utf-8") as handle:
         return ROUND_LIST_ADAPTER.validate_python(json.load(handle))
 
 
-def load_seeded_annotations(path: Path = SEEDED_ANNOTATIONS) -> list[SeededAnnotation]:
-    with path.open("r", encoding="utf-8") as handle:
+def load_seeded_annotations(
+    dataset_id: str = DEFAULT_DATASET_ID, path: Path | None = None
+) -> list[SeededAnnotation]:
+    annotations_path = path or seeded_annotations_path(dataset_id)
+    if not annotations_path.exists():
+        return []
+    with annotations_path.open("r", encoding="utf-8") as handle:
         return SEEDED_ANNOTATION_LIST_ADAPTER.validate_python(json.load(handle))
 
 
 def choose_rounds(
-    rounds: list[Round], username: str, limit: int = N_ROUNDS
+    rounds: list[Round], username: str, dataset_id: str | None = None
 ) -> list[Round]:
     selected = list(rounds)
-    random.Random(username).shuffle(selected)
-    return selected[: min(limit, len(selected))]
+    seed = f"{dataset_id}:{username}" if dataset_id else username
+    random.Random(seed).shuffle(selected)
+    return selected
+
+
+def completed_task_ids(
+    rows: list[dict[str, Any]], valid_task_ids: set[str]
+) -> set[str]:
+    return {
+        task_id
+        for row in rows
+        if isinstance((task_id := row.get("task_id")), str)
+        and task_id in valid_task_ids
+    }
 
 
 def image_for_id(task: Round, image_id: str) -> RoundImage:
@@ -198,7 +255,9 @@ def composite_annotation(background: Image.Image, overlay_data: Any) -> str:
     return encode_png(Image.alpha_composite(base, overlay))
 
 
-def seeded_rating_option(seed: SeededAnnotation, task: Round) -> RatingOption:
+def seeded_rating_option(
+    seed: SeededAnnotation, task: Round, dataset_id: str | None = None
+) -> RatingOption:
     selected = image_for_id(task, seed.selected_image_id)
     background = load_image(selected)
     color = seed.annotation_color or DIFFERENCE_LABEL_STYLES[seed.label]["color"]
@@ -206,7 +265,7 @@ def seeded_rating_option(seed: SeededAnnotation, task: Round) -> RatingOption:
     return RatingOption(
         option_id=f"{seed.source}:{seed.task_id}:{seed.label}",
         source=seed.source,
-        dataset_id=task.metadata.dataset_id or DATASET_ID,
+        dataset_id=task.metadata.dataset_id or dataset_id or DEFAULT_DATASET_ID,
         task_id=seed.task_id,
         selected_image_id=seed.selected_image_id,
         label=seed.label,
@@ -310,7 +369,7 @@ def table_rows(response: Any) -> list[dict[str, Any]]:
 
 
 def fetch_user_submissions(
-    supabase: Any, username: str, dataset_id: str = DATASET_ID
+    supabase: Any, username: str, dataset_id: str = DEFAULT_DATASET_ID
 ) -> list[dict[str, Any]]:
     response = (
         supabase.table("submissions")
@@ -323,7 +382,7 @@ def fetch_user_submissions(
 
 
 def fetch_user_ratings(
-    supabase: Any, username: str, dataset_id: str = DATASET_ID
+    supabase: Any, username: str, dataset_id: str = DEFAULT_DATASET_ID
 ) -> list[dict[str, Any]]:
     response = (
         supabase.table("ratings")
@@ -348,7 +407,10 @@ def upsert_rating(supabase: Any, payload: RatingPayload) -> None:
 
 
 def fetch_peer_submission(
-    supabase: Any, username: str, task_id: str, dataset_id: str = DATASET_ID
+    supabase: Any,
+    username: str,
+    task_id: str,
+    dataset_id: str = DEFAULT_DATASET_ID,
 ) -> dict[str, Any] | None:
     response = (
         supabase.table("submissions")
@@ -369,6 +431,7 @@ def build_rating_options(
     peer_submission: dict[str, Any] | None,
     seeded_annotations: list[SeededAnnotation],
     username: str,
+    dataset_id: str | None = None,
 ) -> list[RatingOption]:
     task_id = task.task_id
     seeds = [seed for seed in seeded_annotations if seed.task_id == task_id]
@@ -382,7 +445,8 @@ def build_rating_options(
             dataset_id=(
                 own_submission.get("dataset_id")
                 or task.metadata.dataset_id
-                or DATASET_ID
+                or dataset_id
+                or DEFAULT_DATASET_ID
             ),
             task_id=task_id,
             selected_image_id=own_submission["selected_image_id"],
@@ -401,7 +465,8 @@ def build_rating_options(
                 dataset_id=(
                     peer_submission.get("dataset_id")
                     or task.metadata.dataset_id
-                    or DATASET_ID
+                    or dataset_id
+                    or DEFAULT_DATASET_ID
                 ),
                 task_id=task_id,
                 selected_image_id=peer_submission["selected_image_id"],
@@ -412,10 +477,10 @@ def build_rating_options(
             )
         )
     elif peer_seed:
-        options.append(seeded_rating_option(peer_seed, task))
+        options.append(seeded_rating_option(peer_seed, task, dataset_id))
 
     if ai_seed:
-        options.append(seeded_rating_option(ai_seed, task))
+        options.append(seeded_rating_option(ai_seed, task, dataset_id))
 
     random.Random(f"{username}:{task_id}:ratings").shuffle(options)
     return options

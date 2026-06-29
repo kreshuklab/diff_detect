@@ -17,12 +17,17 @@ Prototype study app for selecting the odd butterfly wing species, annotating the
    ```toml
    SUPABASE_URL = "https://your-project.supabase.co"
    SUPABASE_KEY = "your-supabase-anon-key"
+   DATASET_ID = "hf_heliconius"
    ```
+
+   `DATASET_ID` sets the default highlighted dataset on the post-login
+   selection page. You can override that default with `DIFF_DETECT_DATASET_ID`
+   in the environment when starting Streamlit.
 
 4. Start the app:
 
    ```sh
-   streamlit run app.py
+   streamlit run src/diff_detect/app.py
    ```
 
 5. Check that the remote Supabase schema is reachable from the app credentials:
@@ -36,6 +41,11 @@ Prototype study app for selecting the odd butterfly wing species, annotating the
 ## Image Data
 
 Rounds are defined in `data/hf_heliconius/rounds.json`. They are generated from the Hugging Face dataset `imageomics/Heliconius-Collection_Cambridge-Butterfly`.
+
+Each dataset lives in `data/<dataset_id>/` and must include `rounds.json`.
+`seeded_annotations.json` is optional. The app plays through every round in
+the selected dataset. After login, users choose a dataset from a progress page
+that shows completed selections and ratings for each available dataset.
 
 Regenerate them with:
 

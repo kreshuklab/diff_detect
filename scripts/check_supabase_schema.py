@@ -8,7 +8,7 @@ from supabase import create_client
 
 REQUIRED_TABLES = ("users", "submissions", "ratings")
 REQUIRED_SELECTS = {
-    "users": "username,password",
+    "users": "username,password,role",
     "submissions": (
         "username,dataset_id,task_id,selected_image_id,labels,explanation,"
         "canvas_json,annotation_layers,composite_png_base64,created_at"
