@@ -1,0 +1,461 @@
+[
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040069",
+    "path": "download/sam3_wing_same_canvas/triple_0003/triple_0003_a_mimic_group_images_blue_yellow_Heliconius_sara_sara_00010982_CAM040069_CAM040069_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sara",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040069_d.JPG"
+    },
+    "image_group": [
+      "3"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040219",
+    "path": "download/sam3_wing_same_canvas/triple_0003/triple_0003_b_mimic_group_images_blue_yellow_Heliconius_sara_sara_00011105_CAM040219_CAM040219_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sara",
+      "sex": "",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040219_d.JPG"
+    },
+    "image_group": [
+      "3"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM041411",
+    "path": "download/sam3_wing_same_canvas/triple_0003/triple_0003_c_mimic_group_images_blue_yellow_Heliconius_sara_magdalena_00012356_CAM041411_CAM041411_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "magdalena",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/4291095/files/CAM041411_d.JPG"
+    },
+    "image_group": [
+      "3"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040069",
+    "path": "download/sam3_wing_same_canvas/triple_0004/triple_0004_b_mimic_group_images_blue_yellow_Heliconius_sara_sara_00010982_CAM040069_CAM040069_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sara",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040069_d.JPG"
+    },
+    "image_group": [
+      "4"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040219",
+    "path": "download/sam3_wing_same_canvas/triple_0004/triple_0004_c_mimic_group_images_blue_yellow_Heliconius_sara_sara_00011105_CAM040219_CAM040219_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sara",
+      "sex": "",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040219_d.JPG"
+    },
+    "image_group": [
+      "4"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040345",
+    "path": "download/sam3_wing_same_canvas/triple_0004/triple_0004_a_mimic_group_images_blue_yellow_Heliconius_sara_sprucei_00011226_CAM040345_CAM040345_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sprucei",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040345_d.JPG"
+    },
+    "image_group": [
+      "4"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040345",
+    "path": "download/sam3_wing_same_canvas/triple_0005/triple_0005_c_mimic_group_images_blue_yellow_Heliconius_sara_sprucei_00011226_CAM040345_CAM040345_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sprucei",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040345_d.JPG"
+    },
+    "image_group": [
+      "5"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040346",
+    "path": "download/sam3_wing_same_canvas/triple_0005/triple_0005_b_mimic_group_images_blue_yellow_Heliconius_sara_sprucei_00011227_CAM040346_CAM040346_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "sprucei",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040346_d.JPG"
+    },
+    "image_group": [
+      "5"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM041411",
+    "path": "download/sam3_wing_same_canvas/triple_0005/triple_0005_a_mimic_group_images_blue_yellow_Heliconius_sara_magdalena_00012356_CAM041411_CAM041411_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "blue_yellow",
+      "species": "Heliconius_sara",
+      "subspecies": "magdalena",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/4291095/files/CAM041411_d.JPG"
+    },
+    "image_group": [
+      "5"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM008509",
+    "path": "download/sam3_wing_same_canvas/triple_0007/triple_0007_c_mimic_group_images_cydnides_Heliconius_cydno_alithea_00003026_CAM008509_CAM008509_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "alithea",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2684906/files/CAM008509_d.JPG"
+    },
+    "image_group": [
+      "7"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040340",
+    "path": "download/sam3_wing_same_canvas/triple_0007/triple_0007_a_mimic_group_images_cydnides_Heliconius_cydno_alithea_00011221_CAM040340_CAM040340_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "alithea",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040340_d.JPG"
+    },
+    "image_group": [
+      "7"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000163",
+    "path": "download/sam3_wing_same_canvas/triple_0007/triple_0007_b_mimic_group_images_cydnides_Heliconius_cydno_cydnides_00001394_CAM000163_CAM000163_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "cydnides",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2677821/files/CAM000163_d.JPG"
+    },
+    "image_group": [
+      "7"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000163",
+    "path": "download/sam3_wing_same_canvas/triple_0008/triple_0008_c_mimic_group_images_cydnides_Heliconius_cydno_cydnides_00001394_CAM000163_CAM000163_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "cydnides",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2677821/files/CAM000163_d.JPG"
+    },
+    "image_group": [
+      "8"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000213",
+    "path": "download/sam3_wing_same_canvas/triple_0008/triple_0008_a_mimic_group_images_cydnides_Heliconius_cydno_cydnides_00001442_CAM000213_CAM000213_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "cydnides",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2677821/files/CAM000213_d.JPG"
+    },
+    "image_group": [
+      "8"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM008509",
+    "path": "download/sam3_wing_same_canvas/triple_0008/triple_0008_b_mimic_group_images_cydnides_Heliconius_cydno_alithea_00003026_CAM008509_CAM008509_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_cydno",
+      "subspecies": "alithea",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2684906/files/CAM008509_d.JPG"
+    },
+    "image_group": [
+      "8"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000150",
+    "path": "download/sam3_wing_same_canvas/triple_0009/triple_0009_c_mimic_group_images_cydnides_Heliconius_eleuchia_eleuchia_00001381_CAM000150_CAM000150_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_eleuchia",
+      "subspecies": "eleuchia",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2677821/files/CAM000150_d.JPG"
+    },
+    "image_group": [
+      "9"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000151",
+    "path": "download/sam3_wing_same_canvas/triple_0009/triple_0009_a_mimic_group_images_cydnides_Heliconius_eleuchia_eleuchia_00001382_CAM000151_CAM000151_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_eleuchia",
+      "subspecies": "eleuchia",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2677821/files/CAM000151_d.JPG"
+    },
+    "image_group": [
+      "9"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040333",
+    "path": "download/sam3_wing_same_canvas/triple_0009/triple_0009_b_mimic_group_images_cydnides_Heliconius_eleuchia_primularis_00011214_CAM040333_CAM040333_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "cydnides",
+      "species": "Heliconius_eleuchia",
+      "subspecies": "primularis",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040333_d.JPG"
+    },
+    "image_group": [
+      "9"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM009112",
+    "path": "download/sam3_wing_same_canvas/triple_0013/triple_0013_a_mimic_group_images_dennis_rayed_Heliconius_melpomene_ecuadorensis_00003465_CAM009112_CAM009112_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "dennis_rayed",
+      "species": "Heliconius_melpomene",
+      "subspecies": "ecuadorensis",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM009112_d.JPG"
+    },
+    "image_group": [
+      "13"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM009118",
+    "path": "download/sam3_wing_same_canvas/triple_0013/triple_0013_c_mimic_group_images_dennis_rayed_Heliconius_melpomene_ecuadorensis_00003472_CAM009118_CAM009118_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "dennis_rayed",
+      "species": "Heliconius_melpomene",
+      "subspecies": "ecuadorensis",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM009118_d.JPG"
+    },
+    "image_group": [
+      "13"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM008689",
+    "path": "download/sam3_wing_same_canvas/triple_0013/triple_0013_b_mimic_group_images_dennis_rayed_Heliconius_melpomene_aglaope_00003211_CAM008689_CAM008689_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "dennis_rayed",
+      "species": "Heliconius_melpomene",
+      "subspecies": "aglaope",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM008689_d.JPG"
+    },
+    "image_group": [
+      "13"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040017",
+    "path": "download/sam3_wing_same_canvas/triple_0031/triple_0031_b_mimic_group_images_postman_yellowbar_Heliconius_erato_dignus_00010933_CAM040017_CAM040017_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_erato",
+      "subspecies": "dignus",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040017_d.JPG"
+    },
+    "image_group": [
+      "31"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM040105",
+    "path": "download/sam3_wing_same_canvas/triple_0031/triple_0031_a_mimic_group_images_postman_yellowbar_Heliconius_erato_dignus_00011002_CAM040105_CAM040105_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_erato",
+      "subspecies": "dignus",
+      "sex": "Female",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2707828/files/CAM040105_d.JPG"
+    },
+    "image_group": [
+      "31"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM009539",
+    "path": "download/sam3_wing_same_canvas/triple_0031/triple_0031_c_mimic_group_images_postman_yellowbar_Heliconius_erato_petiverana_00003756_CAM009539_CAM009539_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_erato",
+      "subspecies": "petiverana",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM009539_d.JPG"
+    },
+    "image_group": [
+      "31"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM008573",
+    "path": "download/sam3_wing_same_canvas/triple_0033/triple_0033_c_mimic_group_images_postman_yellowbar_Heliconius_melpomene_amaryllis_00003094_CAM008573_CAM008573_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_melpomene",
+      "subspecies": "amaryllis",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM008573_d.JPG"
+    },
+    "image_group": [
+      "33"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM008574",
+    "path": "download/sam3_wing_same_canvas/triple_0033/triple_0033_b_mimic_group_images_postman_yellowbar_Heliconius_melpomene_amaryllis_00003095_CAM008574_CAM008574_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_melpomene",
+      "subspecies": "amaryllis",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2686762/files/CAM008574_d.JPG"
+    },
+    "image_group": [
+      "33"
+    ]
+  },
+  {
+    "dataset_id": "butterfly",
+    "image_id": "CAM000532",
+    "path": "download/sam3_wing_same_canvas/triple_0033/triple_0033_a_mimic_group_images_postman_yellowbar_Heliconius_melpomene_rosina_00001650_CAM000532_CAM000532_d_sam3_wings.png",
+    "hash_kwargs": null,
+    "image_info": {
+      "mimic_group": "postman_yellowbar",
+      "species": "Heliconius_melpomene",
+      "subspecies": "rosina",
+      "sex": "Male",
+      "hybrid_stat": "non-hybrid",
+      "file_url": "https://zenodo.org/record/2682458/files/CAM000532_d.JPG"
+    },
+    "image_group": [
+      "33"
+    ]
+  }
+]

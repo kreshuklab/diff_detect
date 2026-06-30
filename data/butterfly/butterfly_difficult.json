@@ -1,0 +1,159 @@
+{
+  "dataset_id": "butterfly",
+  "challenge_id": "butterfly_difficult",
+  "tasks": [
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM009112"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM009118"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM008689"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040069"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040219"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM041411"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040017"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040105"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM009539"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM008573"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM008574"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000532"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040069"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040219"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040345"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040345"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040346"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM041411"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM008509"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040340"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000163"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000163"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000213"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM008509"
+        }
+      ],
+      "difficulty": 0.75
+    },
+    {
+      "images": [
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000150"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM000151"
+        },
+        {
+          "dataset_id": "butterfly",
+          "image_id": "CAM040333"
+        }
+      ],
+      "difficulty": 0.75
+    }
+  ]
+}

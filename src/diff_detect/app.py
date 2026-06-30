@@ -17,17 +17,13 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from diff_detect.models import (
-    AnnotationLayers,
-    CanvasJson,
-    DifferenceLabel,
-    RatingPayload,
-    Round,
-    RoundImage,
-    SeededAnnotation,
-    SubmissionPayload,
-    UserRole,
+    Choice,
+    ImageKey,
+    RatingEval,
+    SelectionChoice,
+    SelectionChoiceKey,
 )
-from diff_detect.study_storage import (
+from diff_detect.storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
     DIFFERENCE_LABEL_STYLES,
@@ -50,9 +46,13 @@ from diff_detect.study_storage import (
     load_rounds,
     load_seeded_annotations,
     reference_images,
-    upsert_rating,
-    upsert_submission,
 )
+
+DifferenceLabel = Literal["shape", "color", "texture"]
+UserRole = Literal["participant", "maintainer"]
+Round = Any
+RoundImage = Any
+SeededAnnotation = Any
 
 try:
     from st_login_form import login_form
@@ -673,29 +673,84 @@ def render_annotation(
                     return
 
                 labels = canvas_labels(current_canvas_json, label)
-                validated_canvas_json = CanvasJson.model_validate(current_canvas_json)
+                serialized_canvas_json = json_ready(current_canvas_json)
+                annotation_layer = {
+                    "mode": "single_canvas_color_coded_labels",
+                    "labels": labels,
+                    "canvas_json": serialized_canvas_json,
+                }
+                selection_choice = SelectionChoice(
+                    images=selection_image_keys(task, dataset_id),
+                    user=username,
+                    index=selected_image_index(task, selected_id),
+                    explanation=explanation.strip() or None,
+                    user_kind="human",
+                    annotations=[annotation_layer],
+                )
                 composite = composite_annotation(
                     selected_image, canvas_result.image_data
                 )
-                payload = SubmissionPayload(
-                    username=username,
+                upsert_selection_choice(
+                    supabase,
+                    selection_choice,
                     dataset_id=dataset_id,
                     task_id=task.task_id,
                     selected_image_id=selected_id,
                     labels=labels,
-                    explanation=explanation.strip() or None,
-                    canvas_json=validated_canvas_json,
-                    annotation_layers=AnnotationLayers(
-                        mode="single_canvas_color_coded_labels",
-                        labels=labels,
-                        canvas_json=validated_canvas_json,
-                    ),
+                    canvas_json=serialized_canvas_json,
                     composite_png_base64=composite,
                 )
-                upsert_submission(supabase, payload)
                 clear_selected_image()
                 st.session_state.pop(canvas_state_key, None)
                 st.rerun()
+
+
+def selection_image_keys(task: Round, dataset_id: str) -> tuple[ImageKey, ...]:
+    return tuple(
+        ImageKey(dataset_id=dataset_id, image_id=image.image_id)
+        for image in task.images
+    )
+
+
+def selected_image_index(task: Round, selected_image_id: str) -> int:
+    for index, image in enumerate(task.images):
+        if image.image_id == selected_image_id:
+            return index
+    raise KeyError(f"Image {selected_image_id!r} is not part of task {task.task_id!r}.")
+
+
+def json_ready(value: Any) -> dict[str, Any]:
+    serialized = json.loads(json.dumps(value))
+    if not isinstance(serialized, dict):
+        raise TypeError("Expected a JSON object.")
+    return serialized
+
+
+def upsert_selection_choice(
+    supabase: Any,
+    selection_choice: SelectionChoice,
+    *,
+    dataset_id: str,
+    task_id: str,
+    selected_image_id: str,
+    labels: list[DifferenceLabel],
+    canvas_json: dict[str, Any],
+    composite_png_base64: str,
+) -> None:
+    row = {
+        "username": selection_choice.user,
+        "dataset_id": dataset_id,
+        "task_id": task_id,
+        "selected_image_id": selected_image_id,
+        "labels": labels,
+        "explanation": selection_choice.explanation,
+        "canvas_json": canvas_json,
+        "annotation_layers": selection_choice.annotations[0],
+        "composite_png_base64": composite_png_base64,
+    }
+    supabase.table("submissions").upsert(
+        row, on_conflict="username,dataset_id,task_id"
+    ).execute()
 
 
 def selected_image_belongs_to_task(task: Round) -> bool:
@@ -789,25 +844,66 @@ def render_rating(
                     key=f"rate_{task.task_id}_{option.option_id}",
                     width="stretch",
                 ):
-                    payload = RatingPayload(
-                        username=username,
-                        dataset_id=dataset_id,
-                        task_id=task.task_id,
-                        winner_source=option.source,
-                        winner_submission_id=option.submission_id,
-                        option_payload=json.loads(
-                            json.dumps(
-                                [option.model_dump(mode="json") for option in options]
+                    rating_eval = RatingEval(
+                        user=username,
+                        choices=[
+                            selection_choice_key_for_option(
+                                task, dataset_id, rating_option
                             )
-                        ),
+                            for rating_option in options
+                        ],
+                        most_convincing=Choice(index=index),
                     )
                     try:
-                        upsert_rating(supabase, payload)
+                        upsert_rating_eval(
+                            supabase,
+                            rating_eval,
+                            dataset_id=dataset_id,
+                            task_id=task.task_id,
+                            options=options,
+                        )
                     except Exception as exc:
                         st.error("Could not save rating to Supabase.")
                         st.exception(exc)
                         return
                     st.rerun()
+
+
+def selection_choice_key_for_option(
+    task: Round, dataset_id: str, option: Any
+) -> SelectionChoiceKey:
+    return SelectionChoiceKey(
+        images=selection_image_keys(task, dataset_id),
+        user=option_user_id(option),
+    )
+
+
+def option_user_id(option: Any) -> str:
+    return f"{option.source}:{option.submission_id or option.option_id}"
+
+
+def upsert_rating_eval(
+    supabase: Any,
+    rating_eval: RatingEval,
+    *,
+    dataset_id: str,
+    task_id: str,
+    options: list[Any],
+) -> None:
+    winner = options[rating_eval.most_convincing.index]
+    row = {
+        "username": rating_eval.user,
+        "dataset_id": dataset_id,
+        "task_id": task_id,
+        "winner_source": winner.source,
+        "winner_submission_id": winner.submission_id,
+        "option_payload": json.loads(
+            json.dumps([option.model_dump(mode="json") for option in options])
+        ),
+    }
+    supabase.table("ratings").upsert(
+        row, on_conflict="username,dataset_id,task_id"
+    ).execute()
 
 
 def render_debug_task_summary(task: Round, debug_mode: bool) -> None:

@@ -1,5 +1,6 @@
+from diff_detect.models import ImageKey, SelectionChoice
 from diff_detect.models_old import CanvasJson, Round
-from diff_detect.study_storage import (
+from diff_detect.storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
     DATASET_ID_ENV_VAR,
@@ -26,6 +27,24 @@ def test_choose_rounds_is_stable_for_user():
     assert first == second
     assert set(first) == {task.task_id for task in rounds}
     assert len(first) == len(rounds)
+
+
+def test_new_selection_choice_model_accepts_manifest_image_ids():
+    task = load_rounds()[0]
+    images = tuple(
+        ImageKey(dataset_id=DEFAULT_DATASET_ID, image_id=image.image_id)
+        for image in task.images
+    )
+
+    choice = SelectionChoice(
+        images=images,
+        user="ada",
+        index=0,
+        user_kind="human",
+        annotations=[{"labels": ["shape"]}],
+    )
+
+    assert choice.images == images
 
 
 def test_completed_task_ids_ignore_duplicates_and_unknown_tasks():

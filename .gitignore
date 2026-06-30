@@ -5,4 +5,5 @@
 .streamlit/secrets.toml
 __pycache__/
 data/**/images/
+data/**/download/
 supabase/.temp/

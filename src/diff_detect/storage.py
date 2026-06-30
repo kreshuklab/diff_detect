@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import io
 import json
 import os
@@ -15,17 +14,6 @@ from typing import Any
 import numpy as np
 from PIL import Image, ImageDraw
 from pydantic import TypeAdapter
-
-from diff_detect.models_old import (
-    CanvasJson,
-    DifferenceLabel,
-    RatingOption,
-    RatingPayload,
-    Round,
-    RoundImage,
-    SeededAnnotation,
-    SubmissionPayload,
-)
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_ROOT = ROOT / "data"
@@ -178,62 +166,6 @@ def download_image_bytes(source_url: str) -> bytes:
     )
     with urllib.request.urlopen(request, timeout=8) as response:
         return response.read()
-
-
-def placeholder_image(
-    image_id: str, species_role: str, size: tuple[int, int]
-) -> Image.Image:
-    width, height = size
-    digest = hashlib.sha256(image_id.encode("utf-8")).digest()
-    base_hue = digest[0]
-    accent_hue = digest[1]
-    if species_role == "odd":
-        accent_hue = (accent_hue + 90) % 255
-
-    bg = Image.new("RGBA", size, (248, 248, 244, 255))
-    draw = ImageDraw.Draw(bg, "RGBA")
-    cx, cy = width // 2, height // 2
-
-    left = [
-        (cx - 24, cy),
-        (width * 0.12, height * 0.18),
-        (width * 0.08, height * 0.75),
-        (cx - 42, height * 0.86),
-    ]
-    right = [(width - x, y) for x, y in left]
-    body = (max(12, width // 38), max(70, height // 5))
-    main = (80 + base_hue // 3, 70 + accent_hue // 4, 150 + base_hue // 5, 210)
-    accent = (190 + accent_hue // 6, 90 + base_hue // 5, 80 + accent_hue // 7, 170)
-    outline = (65, 58, 54, 255)
-
-    draw.polygon(left, fill=main, outline=outline)
-    draw.polygon(right, fill=main, outline=outline)
-    draw.ellipse((cx - body[0], cy - body[1], cx + body[0], cy + body[1]), fill=outline)
-    for offset in (-78, -36, 36, 78):
-        draw.arc(
-            (cx - 220, cy - 155 + offset, cx - 8, cy + 120 + offset),
-            205,
-            326,
-            fill=accent,
-            width=5,
-        )
-        draw.arc(
-            (cx + 8, cy - 155 + offset, cx + 220, cy + 120 + offset),
-            214,
-            335,
-            fill=accent,
-            width=5,
-        )
-
-    if species_role == "odd":
-        draw.ellipse(
-            (cx - 210, cy - 54, cx - 120, cy + 36), outline=(232, 62, 140, 210), width=8
-        )
-        draw.ellipse(
-            (cx + 120, cy - 54, cx + 210, cy + 36), outline=(232, 62, 140, 210), width=8
-        )
-
-    return bg
 
 
 def encode_png(image: Image.Image) -> str:

@@ -1,21 +1,26 @@
 from __future__ import annotations
 
 from pathlib import Path
+from statistics import mean
 from typing import Annotated, Any, Literal, Sequence, Sized, TypeVar
 
 from annotated_types import Ge, Le, MinLen, Predicate
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, RootModel, model_validator
 from typing_extensions import Self
 
 S = TypeVar("S", bound=Sized)
 NonEmpty = Annotated[S, MinLen(1)]
 
-_Id = Annotated[str, Predicate(lambda s: s.isalnum())]
+_Id = Annotated[
+    str,
+    Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
+]
 
 UserId = str
 DatasetId = _Id
 ImageId = _Id
 TaskId = _Id
+ChallengeId = Literal["dummy", "butterfly_easy", "butterfly_difficult"]
 # SelectionChoiceId = tuple[Unpack[SelectionTaskId], UserId, int]
 # RatingChoiceId = tuple[Unpack[SelectionChoiceId], UserId, int]
 
@@ -37,9 +42,13 @@ class ImageKey(BaseModel):
 
 class Image(ImageKey):
     path: Path
-    hash_kwargs: Md5Hash | Sha256Hash
+    hash_kwargs: Md5Hash | Sha256Hash | None
     image_info: NonEmpty[dict[str, str]]
     image_group: NonEmpty[tuple[str]]
+
+
+class Dataset(RootModel[list[Image]]):
+    """A list of images in a dataset."""
 
 
 class SelectionTaskKey(BaseModel):
@@ -132,3 +141,13 @@ class RatingEval(RatingEvalKey):
             raise ValueError("Most likely AI index is out of bounds.")
 
         return self
+
+
+class SelectionChallenge(BaseModel):
+    dataset_id: DatasetId
+    challenge_id: ChallengeId
+    tasks: NonEmpty[Sequence[SelectionTask]]
+
+    @property
+    def difficulty(self) -> float:
+        return mean(task.difficulty for task in self.tasks)
