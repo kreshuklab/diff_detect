@@ -34,7 +34,8 @@ class Sha256Hash(BaseModel):
 
 
 class ImageKey(BaseModel):
-    """A unique image in a dataset."""
+    """A
+    image in a dataset."""
 
     dataset_id: DatasetId
     image_id: ImageId
@@ -103,7 +104,8 @@ class RatingTask(RatingTaskKey):
 
     @model_validator(mode="after")
     def _unique_choices(self) -> Self:
-        if len(set(self.choices)) != len(self.choices):
+        choice_keys = [choice.model_dump_json() for choice in self.choices]
+        if len(set(choice_keys)) != len(choice_keys):
             raise ValueError("All choices must be unique.")
 
         return self

@@ -6,16 +6,30 @@ import toml
 
 from supabase import create_client
 
-REQUIRED_TABLES = ("users", "submissions", "ratings")
+REQUIRED_TABLES = (
+    "users",
+    "images",
+    "selection_challenges",
+    "selection_tasks",
+    "selection_choices",
+    "rating_tasks",
+    "rating_evals",
+)
 REQUIRED_SELECTS = {
     "users": "username,password,role",
-    "submissions": (
-        "username,dataset_id,task_id,selected_image_id,labels,explanation,"
-        "canvas_json,annotation_layers,composite_png_base64,created_at"
+    "images": "dataset_id,image_id,path,hash_kwargs,image_info,image_group,created_at",
+    "selection_challenges": "dataset_id,challenge_id,created_at",
+    "selection_tasks": (
+        "dataset_id,challenge_id,task_index,images,difficulty,created_at"
     ),
-    "ratings": (
-        "username,dataset_id,task_id,winner_source,winner_submission_id,"
-        "option_payload,created_at"
+    "selection_choices": (
+        "dataset_id,challenge_id,task_index,images,username,user_kind,"
+        "choice_index,explanation,annotations,artifacts,created_at"
+    ),
+    "rating_tasks": "dataset_id,challenge_id,task_index,choices,created_at",
+    "rating_evals": (
+        "dataset_id,challenge_id,task_index,username,choices,"
+        "most_convincing,most_likely_ai,artifacts,created_at"
     ),
 }
 
@@ -52,9 +66,7 @@ def main() -> None:
         )
         raise SystemExit(1)
 
-    print(
-        "Supabase schema check passed: users, submissions, and ratings have the required columns."
-    )
+    print("Supabase schema check passed: model tables have the required columns.")
 
 
 if __name__ == "__main__":

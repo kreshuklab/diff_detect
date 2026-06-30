@@ -1,30 +1,3 @@
-create table if not exists public.users (
-  username text not null default ''::text,
-  password text not null,
-  role text not null default 'participant',
-  constraint users_pkey primary key (username),
-  constraint users_username_key unique (username),
-  constraint users_password_check check (length(trim(both from password)) > 1),
-  constraint users_username_check check (length(trim(both from username)) > 1),
-  constraint users_role_check check (role in ('participant', 'maintainer'))
-);
-
-alter table if exists public.users
-  add column if not exists role text not null default 'participant';
-
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conrelid = 'public.users'::regclass
-      and conname = 'users_role_check'
-  ) then
-    alter table public.users
-      add constraint users_role_check check (role in ('participant', 'maintainer'));
-  end if;
-end $$;
-
 create table if not exists public.images (
   dataset_id text not null,
   image_id text not null,

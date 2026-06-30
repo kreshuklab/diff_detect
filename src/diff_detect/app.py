@@ -46,6 +46,8 @@ from diff_detect.storage import (
     load_rounds,
     load_seeded_annotations,
     reference_images,
+    upsert_rating_eval,
+    upsert_selection_choice,
 )
 
 DifferenceLabel = Literal["shape", "color", "texture"]
@@ -242,7 +244,9 @@ def main() -> None:
         rounds = choose_rounds(load_rounds(dataset_id), username, dataset_id=dataset_id)
         seeded_annotations = load_seeded_annotations(dataset_id)
     except FileNotFoundError:
-        st.error(f"Dataset `{dataset_id}` is missing `data/{dataset_id}/rounds.json`.")
+        st.error(
+            f"Dataset `{dataset_id}` is missing its dataset or challenge JSON file."
+        )
         return
     except ValueError as exc:
         st.error(f"Dataset `{dataset_id}` is not valid.")
@@ -386,7 +390,7 @@ def render_dataset_selection(
 
     if not dataset_ids:
         st.error(
-            "No datasets found. Add a `rounds.json` file under `data/<dataset_id>/`."
+            "No datasets found. Add a `<dataset_id>.json` file under `data/<dataset_id>/`."
         )
         return
 
@@ -707,7 +711,7 @@ def render_annotation(
 
 def selection_image_keys(task: Round, dataset_id: str) -> tuple[ImageKey, ...]:
     return tuple(
-        ImageKey(dataset_id=dataset_id, image_id=image.image_id)
+        ImageKey(dataset_id=image.dataset_id or dataset_id, image_id=image.image_id)
         for image in task.images
     )
 
@@ -724,33 +728,6 @@ def json_ready(value: Any) -> dict[str, Any]:
     if not isinstance(serialized, dict):
         raise TypeError("Expected a JSON object.")
     return serialized
-
-
-def upsert_selection_choice(
-    supabase: Any,
-    selection_choice: SelectionChoice,
-    *,
-    dataset_id: str,
-    task_id: str,
-    selected_image_id: str,
-    labels: list[DifferenceLabel],
-    canvas_json: dict[str, Any],
-    composite_png_base64: str,
-) -> None:
-    row = {
-        "username": selection_choice.user,
-        "dataset_id": dataset_id,
-        "task_id": task_id,
-        "selected_image_id": selected_image_id,
-        "labels": labels,
-        "explanation": selection_choice.explanation,
-        "canvas_json": canvas_json,
-        "annotation_layers": selection_choice.annotations[0],
-        "composite_png_base64": composite_png_base64,
-    }
-    supabase.table("submissions").upsert(
-        row, on_conflict="username,dataset_id,task_id"
-    ).execute()
 
 
 def selected_image_belongs_to_task(task: Round) -> bool:
@@ -880,30 +857,6 @@ def selection_choice_key_for_option(
 
 def option_user_id(option: Any) -> str:
     return f"{option.source}:{option.submission_id or option.option_id}"
-
-
-def upsert_rating_eval(
-    supabase: Any,
-    rating_eval: RatingEval,
-    *,
-    dataset_id: str,
-    task_id: str,
-    options: list[Any],
-) -> None:
-    winner = options[rating_eval.most_convincing.index]
-    row = {
-        "username": rating_eval.user,
-        "dataset_id": dataset_id,
-        "task_id": task_id,
-        "winner_source": winner.source,
-        "winner_submission_id": winner.submission_id,
-        "option_payload": json.loads(
-            json.dumps([option.model_dump(mode="json") for option in options])
-        ),
-    }
-    supabase.table("ratings").upsert(
-        row, on_conflict="username,dataset_id,task_id"
-    ).execute()
 
 
 def render_debug_task_summary(task: Round, debug_mode: bool) -> None:

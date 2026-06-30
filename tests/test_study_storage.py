@@ -1,8 +1,9 @@
 from diff_detect.models import ImageKey, SelectionChoice
-from diff_detect.models_old import CanvasJson, Round
+from diff_detect.models_old import CanvasJson
 from diff_detect.storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
+    DEFAULT_CHALLENGE_ID,
     DATASET_ID_ENV_VAR,
     DEFAULT_DATASET_ID,
     DIFFERENCE_LABEL_STYLES,
@@ -13,9 +14,11 @@ from diff_detect.storage import (
     choose_rounds,
     completed_task_ids,
     configured_dataset_id,
+    load_dataset,
     load_image,
     load_rounds,
     load_seeded_annotations,
+    load_selection_challenge,
     normalize_dataset_id,
 )
 
@@ -72,7 +75,7 @@ def test_configured_dataset_id_uses_environment_override(monkeypatch):
 
 
 def test_normalize_dataset_id_rejects_paths():
-    assert normalize_dataset_id(" hf_heliconius ") == DEFAULT_DATASET_ID
+    assert normalize_dataset_id(" butterfly ") == DEFAULT_DATASET_ID
     for dataset_id in ("", "../other", "nested/dataset", "."):
         try:
             normalize_dataset_id(dataset_id)
@@ -84,6 +87,16 @@ def test_normalize_dataset_id_rejects_paths():
 
 def test_available_dataset_ids_include_default_dataset():
     assert DEFAULT_DATASET_ID in available_dataset_ids()
+
+
+def test_default_dataset_and_challenge_use_new_models():
+    dataset = load_dataset()
+    challenge = load_selection_challenge()
+
+    assert dataset.root
+    assert challenge.dataset_id == DEFAULT_DATASET_ID
+    assert challenge.challenge_id == DEFAULT_CHALLENGE_ID
+    assert challenge.tasks
 
 
 def test_seeded_annotations_are_optional_for_datasets(tmp_path):
@@ -147,7 +160,7 @@ def test_canvas_json_model_preserves_fabric_object_extras():
     assert canvas_json.objects[0].model_extra == {"path": [["M", 1, 2], ["L", 3, 4]]}
 
 
-def test_rating_options_include_self_peer_and_ai_with_fallback():
+def test_rating_options_include_self_without_seeded_fallbacks():
     task = load_rounds()[0]
     selected_id = task.odd_image_id
     own_submission = {
@@ -162,45 +175,14 @@ def test_rating_options_include_self_peer_and_ai_with_fallback():
         task, own_submission, None, load_seeded_annotations(), "ada"
     )
 
-    assert sorted(option.source for option in options) == ["ai", "peer", "self"]
+    assert sorted(option.source for option in options) == ["self"]
     assert {option.dataset_id for option in options} == {DEFAULT_DATASET_ID}
 
 
-def test_round_model_allows_three_or_four_images():
-    round_data = {
-        "task_id": "three_image_fixture",
-        "odd_image_id": "odd",
-        "images": [
-            {"image_id": "ref_1", "path": "data/test/ref_1.png"},
-            {"image_id": "ref_2", "path": "data/test/ref_2.png"},
-            {
-                "image_id": "odd",
-                "path": "data/test/odd.png",
-                "species_role": "odd",
-            },
-        ],
-    }
-
-    assert len(Round.model_validate(round_data).images) == 3
-
-
-def test_round_manifest_uses_non_hybrid_mimic_groups_and_includes_strict_example():
-    strict_rounds = 0
+def test_round_views_are_built_from_selection_challenge_tasks():
     for task in load_rounds():
         images = task.images
-        references = [image for image in images if image.species_role == "reference"]
-        odd = [image for image in images if image.species_role == "odd"]
 
-        assert len(images) in (3, 4)
-        assert len(references) == len(images) - 1
-        assert len(odd) == 1
-        assert {image.hybrid_stat for image in images} == {"non-hybrid"}
-        assert len({image.species for image in references}) == 1
-        assert len({image.subspecies for image in references}) == 1
-        assert len({image.view for image in images}) == 1
-        assert len({image.mimic_group for image in images}) == 1
-        assert odd[0].species not in {image.species for image in references}
-        if len({image.subspecies for image in images}) == 1:
-            strict_rounds += 1
-
-    assert strict_rounds >= 1
+        assert len(images) >= 1
+        assert task.task_id.startswith(f"{DEFAULT_CHALLENGE_ID}:")
+        assert task.metadata.dataset_id == DEFAULT_DATASET_ID
