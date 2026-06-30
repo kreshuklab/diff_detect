@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "diff-detect"
+version = "0.1.0"
+description = "Streamlit study app for annotating visual differences between images."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "annotated-types>=0.5.0,<1",
+    "loguru>=0.7.3",
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "pydantic>=2.0",
+    "st-login-form>=0.3.0",
+    "st-supabase-connection>=2.1",
+    "streamlit>=1.36",
+    # "streamlit-drawable-canvas-fix>=0.9.3",
+    "streamlit-labelstudio<0.1.0",
+    "supabase>=2.0",
+    "toml>=0.10",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]

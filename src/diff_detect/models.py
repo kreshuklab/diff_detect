@@ -1,142 +1,134 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from pathlib import Path
+from typing import Annotated, Any, Literal, Sequence, Sized, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from annotated_types import Ge, Le, MinLen, Predicate
+from pydantic import BaseModel, model_validator
+from typing_extensions import Self
 
+S = TypeVar("S", bound=Sized)
+NonEmpty = Annotated[S, MinLen(1)]
 
-DifferenceLabel = Literal["shape", "color", "texture"]
-SpeciesRole = Literal["reference", "odd"]
-WinnerSource = Literal["self", "peer", "ai"]
-UserRole = Literal["participant", "maintainer"]
+_Id = Annotated[str, Predicate(lambda s: s.isalnum())]
 
-
-class RoundImageSource(BaseModel):
-    camid: str = ""
-    filename: str = ""
-    filepath: str = ""
-    md5: str = ""
-    record_number: str = ""
-    zenodo_link: str = ""
-
-
-class RoundImage(BaseModel):
-    image_id: str
-    path: str
-    source_url: str | None = None
-    species_role: SpeciesRole = "reference"
-    species: str = ""
-    subspecies: str = ""
-    view: str = ""
-    mimic_group: str = ""
-    hybrid_stat: str = ""
-    source: RoundImageSource = Field(default_factory=RoundImageSource)
+UserId = str
+DatasetId = _Id
+ImageId = _Id
+TaskId = _Id
+# SelectionChoiceId = tuple[Unpack[SelectionTaskId], UserId, int]
+# RatingChoiceId = tuple[Unpack[SelectionChoiceId], UserId, int]
 
 
-class RoundMetadata(BaseModel):
-    dataset_id: str = ""
-    dataset: str = ""
-    dataset_url: str = ""
-    manifest_url: str = ""
-    view: str = ""
-    generation_seed: int | None = None
-    generation_rule: str = ""
-    round_rule: str = ""
-    reference_species: str = ""
-    reference_subspecies: str = ""
-    odd_species: str = ""
-    odd_subspecies: str = ""
-    mimic_group: str = ""
-    hybrid_stat: str = ""
-    references_share_subspecies: bool | None = None
-    all_four_share_subspecies: bool | None = None
-    all_four_share_mimic_group: bool | None = None
+class Md5Hash(BaseModel):
+    md5: str
 
 
-class Round(BaseModel):
-    task_id: str
-    odd_image_id: str
-    images: list[RoundImage]
-    metadata: RoundMetadata = Field(default_factory=RoundMetadata)
+class Sha256Hash(BaseModel):
+    sha256: str
+
+
+class ImageKey(BaseModel):
+    """A unique image in a dataset."""
+
+    dataset_id: DatasetId
+    image_id: ImageId
+
+
+class Image(ImageKey):
+    path: Path
+    hash_kwargs: Md5Hash | Sha256Hash
+    image_info: NonEmpty[dict[str, str]]
+    image_group: NonEmpty[tuple[str]]
+
+
+class SelectionTaskKey(BaseModel):
+    """A group of images to be presented to a user for selection."""
+
+    images: tuple[ImageKey, ...]
+
+
+class SelectionTask(SelectionTaskKey):
+    difficulty: Annotated[float, Ge(0.0), Le(1.0)] = 0.5
+
+
+class SelectionChoiceKey(BaseModel):
+    """A user's selection of an image from a selection task."""
+
+    images: NonEmpty[tuple[ImageKey, ...]]
+    user: UserId
+
+
+class Choice(BaseModel):
+    index: int
+    explanation: str | None = None
+
+
+class SelectionChoice(SelectionChoiceKey, Choice):
+    user_kind: Literal["ai", "human"]
+    annotations: Sequence[dict[str, Any]]
 
     @model_validator(mode="after")
-    def validate_round_images(self) -> "Round":
-        odd_images = [image for image in self.images if image.species_role == "odd"]
-        if len(self.images) not in (3, 4):
-            raise ValueError("A round must contain three or four images.")
-        if len(odd_images) != 1:
-            raise ValueError("A round must contain exactly one odd image.")
-        if odd_images[0].image_id != self.odd_image_id:
-            raise ValueError("odd_image_id must match the image marked as odd.")
+    def _annotations_or_explanation(self) -> Self:
+        if not self.annotations and not self.explanation:
+            raise ValueError(
+                "At least one annotation or an explanation must be provided."
+            )
         return self
 
 
-class SeededAnnotation(BaseModel):
-    task_id: str
-    source: Literal["ai", "peer"]
-    selected_image_id: str
-    label: DifferenceLabel
-    explanation: str = ""
-    annotation_color: str = "#ffb000"
+class RatingTaskKey(BaseModel):
+    """A group of selection choices to be presented to a user for rating."""
+
+    choices: NonEmpty[Sequence[SelectionChoiceKey]]
 
 
-class CanvasObject(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class RatingTask(RatingTaskKey):
+    @model_validator(mode="after")
+    def _from_same_task(self) -> Self:
+        """
+        Ensure that all selection choices are from the same selection task.
+        """
+        assert all(c.images == self.images for c in self.choices)
+        return self
 
-    type: str = ""
-    stroke: str | None = None
-    fill: str | None = None
+    @model_validator(mode="after")
+    def _unique_choices(self) -> Self:
+        if len(set(self.choices)) != len(self.choices):
+            raise ValueError("All choices must be unique.")
 
+        return self
 
-class CanvasJson(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    version: str = ""
-    objects: list[CanvasObject] = Field(default_factory=list)
-    background: str | None = None
-
-
-class AnnotationLayers(BaseModel):
-    mode: Literal["single_canvas_color_coded_labels"]
-    labels: list[DifferenceLabel]
-    canvas_json: CanvasJson
-
-
-class SubmissionPayload(BaseModel):
-    username: str
-    dataset_id: str
-    task_id: str
-    selected_image_id: str
-    labels: list[DifferenceLabel]
-    explanation: str | None = None
-    canvas_json: CanvasJson
-    annotation_layers: AnnotationLayers
-    composite_png_base64: str
-
-    @field_validator("labels")
-    @classmethod
-    def require_labels(cls, labels: list[DifferenceLabel]) -> list[DifferenceLabel]:
-        if not labels:
-            raise ValueError("At least one difference label is required.")
-        return labels
+    @property
+    def images(self):
+        return self.choices[0].images
 
 
-class RatingOption(BaseModel):
-    option_id: str
-    source: WinnerSource
-    dataset_id: str
-    task_id: str
-    selected_image_id: str
-    label: str
-    explanation: str
-    composite_png_base64: str
-    submission_id: str | None = None
+class RatingEvalKey(RatingTaskKey):
+    """A user's evaluations of a rating task."""
+
+    user: UserId
 
 
-class RatingPayload(BaseModel):
-    username: str
-    dataset_id: str
-    task_id: str
-    winner_source: WinnerSource
-    winner_submission_id: str | None = None
-    option_payload: list[dict[str, Any]]
+class RatingEval(RatingEvalKey):
+    most_convincing: Choice
+    most_likely_ai: Choice | None = None
+
+    @model_validator(mode="after")
+    def _most_convincing_is_valid(self) -> Self:
+        if self.most_convincing.index < 0 or self.most_convincing.index >= len(
+            self.choices
+        ):
+            raise ValueError("Most convincing index is out of bounds.")
+
+        return self
+
+    @model_validator(mode="after")
+    def _most_likely_ai_is_valid(self) -> Self:
+        if self.most_likely_ai and (
+            self.most_likely_ai.index < 0
+            or self.most_likely_ai.index >= len(self.choices)
+        ):
+            raise ValueError("Most likely AI index is out of bounds.")
+
+        return self

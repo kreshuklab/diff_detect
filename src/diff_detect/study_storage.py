@@ -16,7 +16,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 from pydantic import TypeAdapter
 
-from diff_detect.models import (
+from diff_detect.models_old import (
     CanvasJson,
     DifferenceLabel,
     RatingOption,

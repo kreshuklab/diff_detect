@@ -1,4 +1,4 @@
-from diff_detect.models import CanvasJson, Round
+from diff_detect.models_old import CanvasJson, Round
 from diff_detect.study_storage import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,

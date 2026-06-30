@@ -1,6 +1,8 @@
-__pycache__/
+**.DS_Store
+*.egg-info/
 *.py[cod]
 .pytest_cache/
 .streamlit/secrets.toml
+__pycache__/
 data/**/images/
 supabase/.temp/
