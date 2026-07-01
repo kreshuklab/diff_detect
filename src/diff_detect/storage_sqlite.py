@@ -1,32 +1,38 @@
-from st_supabase_connection import SupabaseConnection
+from sqlmodel import Session, create_engine, select
 
-from .models import UserId
+from .models import ExplainedDifference, ExplanationRating, User, UserId, UserRole
 
 
-class SupabaseStorage:
-    """A storage backend for diff-detect that uses Supabase."""
+class SqliteStorage:
+    """A storage backend for diff-detect that uses Sqlite."""
 
-    def __init__(self, supabase: SupabaseConnection):
-        self.supabase = supabase
+    def __init__(self):
+        self.engine = create_engine("sqlite:///database.db")
 
-    @property
-    def table(self):
-        return self.supabase.table
+    def fetch_user_role(self, user_id: UserId) -> UserRole:
+        with Session(self.engine) as session:
+            statement = select(User).where(User.id == user_id)
+            user = session.exec(statement).first()
+            if user is None:
+                raise ValueError(f"User {user_id} not found.")
 
-    def fetch_user_role(self, user: UserId):
-        """Fetch the role of a user from the Supabase database."""
-        response = self.table("users").select("role").eq("username", user).execute()
-        if not response.data:
-            raise ValueError(f"User {user} not found.")
-        row = response.data[0]
-        if not isinstance(row, dict) or "role" not in row:
-            raise ValueError(f"Invalid response for user {user}: {type(row)}")
-        return row["role"]
+            return user.role
 
-    def fetch_selection_choices(self, user: UserId):
-        """Fetch all selection choices for a given user."""
-        response = self.table("selection_choices").select("*").eq("user", user).execute()
-        return [SelectionChoice.model_validate(item) for item in response.data]
+    def fetch_explanations(self, user_id: UserId):
+        """Fetch all explanations submitted by a given user."""
+        with Session(self.engine) as session:
+            statement = select(ExplainedDifference).where(ExplainedDifference.user == user_id)
+            explanations = session.exec(statement)
+
+            print(explanations)
+            return list(explanations)
+
+    def fetch_ratings(self, user_id: UserId):
+        """Fetch all ratings submitted by a given user."""
+        with Session(self.engine) as session:
+            statement = select(ExplanationRating).where(ExplanationRating.self == user_id)
+            ratings = session.exec(statement)
+            return list(ratings)
 
     def load_challenge_progress(
         user: UserId

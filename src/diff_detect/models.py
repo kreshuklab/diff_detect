@@ -1,82 +1,112 @@
+"""data models for diff-detect.
+
+data flow:
+    Dataset -> SelectionChallenge -> SelectionTask -> SelectionChoice -> RatingTask -> RatingEval"""
+
 from __future__ import annotations
 
-from pathlib import Path
-from statistics import mean
-from typing import Annotated, Any, Literal, Sequence, Sized, TypeVar
+import datetime
+from enum import StrEnum, auto
+from typing import Annotated, Any, Literal, NewType, Sequence, Sized, TypeVar
 
-from annotated_types import Ge, Le, MinLen, Predicate
-from pydantic import BaseModel, RootModel, model_validator
+from annotated_types import MinLen
+from pydantic import BaseModel, model_validator
+from sqlmodel import JSON, Column, Field, SQLModel, create_engine
 from typing_extensions import Self
 
 S = TypeVar("S", bound=Sized)
 NonEmpty = Annotated[S, MinLen(1)]
 
-_Id = Annotated[
-    str,
-    Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
-]
+# _Id = Annotated[
+#     str,
+#     Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
+# ]
 
 UserId = str
-DatasetId = _Id
-ImageId = _Id
-TaskId = _Id
-ChallengeId = Literal["dummy", "butterfly_easy", "butterfly_difficult"]
-# SelectionChoiceId = tuple[Unpack[SelectionTaskId], UserId, int]
-# RatingChoiceId = tuple[Unpack[SelectionChoiceId], UserId, int]
+ExplainedDifferenceId = NewType("ExplainedDifferenceId", int)
+DatasetId = Literal["butterfly"]
+ImageId = str
+TaskId = NewType("TaskId", str)
+ExplainChallengeId = Literal[
+    "select_dummy", "select_butterfly_easy", "select_butterfly_difficult"
+]
+RateChallengeId = Literal[
+    "rate_dummy", "rate_butterfly_easy", "rate_butterfly_difficult"
+]
+ChallengeId = ExplainChallengeId | RateChallengeId
 
 
-class Md5Hash(BaseModel):
-    md5: str
+class Image(SQLModel, table=True):
+    """An image in a dataset."""
+
+    id: ImageId = Field(primary_key=True)
+    image_info: dict[str, Any] = Field(sa_type=JSON)
+    image_group: str
+    source: str
 
 
-class Sha256Hash(BaseModel):
-    sha256: str
+_ImageId = Annotated[ImageId, Field(foreign_key="image.id")]
 
 
-class ImageKey(BaseModel):
-    """A
-    image in a dataset."""
-
-    dataset_id: DatasetId
-    image_id: ImageId
+# class LocalImage(Image):
+#     path: Path
 
 
-class Image(ImageKey):
-    path: Path
-    hash_kwargs: Md5Hash | Sha256Hash | None
-    image_info: NonEmpty[dict[str, str]]
-    image_group: NonEmpty[tuple[str]]
-
-
-class Dataset(RootModel[list[Image]]):
+class Dataset(BaseModel):
     """A list of images in a dataset."""
 
+    # dataset_id: DatasetId
+    images: dict[ImageId, Image]
 
-class SelectionTaskKey(BaseModel):
-    """A group of images to be presented to a user for selection."""
-
-    images: tuple[ImageKey, ...]
-
-
-class SelectionTask(SelectionTaskKey):
-    difficulty: Annotated[float, Ge(0.0), Le(1.0)] = 0.5
+    def __getitem__(self, key: ImageId) -> Image:
+        return self.images[key]
 
 
-class SelectionChoiceKey(BaseModel):
-    """A user's selection of an image from a selection task."""
-
-    images: NonEmpty[tuple[ImageKey, ...]]
-    user: UserId
+class UserRole(StrEnum):
+    MAINTAINER = auto()
+    PARTICIPANT = auto()
 
 
-class Choice(BaseModel):
-    index: int
-    explanation: str | None = None
+class UserKind(StrEnum):
+    HUMAN = auto()
+    AI = auto()
 
 
-class SelectionChoice(SelectionChoiceKey, Choice):
-    user_kind: Literal["ai", "human"]
-    annotations: Sequence[dict[str, Any]]
+class User(SQLModel, table=True):
+    id: UserId = Field(primary_key=True)
+    kind: UserKind
+    role: UserRole
+
+
+_UserId = Annotated[UserId, Field(foreign_key="user.id")]
+
+
+# class ReferenceImage(SQLModel):
+#     image: ImageId = Field(foreign_key="image.id", primary_key=True)
+#     explained_difference: ExplainedDifferenceId = Field(
+#         foreign_key="explaineddifference.id", primary_key=True
+#     )
+
+
+class ExplainDiffernceTask(SQLModel):
+    annotated_image: ImageId
+    reference_image1: ImageId
+    reference_image2: ImageId
+
+    @model_validator(mode="before")
+    def _order_references(cls, values: dict[str, Any]) -> dict[str, Any]:
+        ref1, ref2 = sorted([values["reference_image1"], values["reference_image2"]])
+        values["reference_image1"] = ref1
+        values["reference_image2"] = ref2
+        return values
+
+
+class ExplainedDifference(ExplainDiffernceTask, table=True):
+    id: ExplainedDifferenceId | None = Field(primary_key=True)
+    user: _UserId
+    explanation: str | None
+    annotations: dict[str, Any] | None = Field(sa_column=Column(JSON))
+    timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
     @model_validator(mode="after")
     def _annotations_or_explanation(self) -> Self:
@@ -87,69 +117,56 @@ class SelectionChoice(SelectionChoiceKey, Choice):
         return self
 
 
-class RatingTaskKey(BaseModel):
-    """A group of selection choices to be presented to a user for rating."""
+_ExplainedDifferenceId = Annotated[
+    ExplainedDifferenceId, Field(foreign_key="explaineddifference.id")
+]
 
-    choices: NonEmpty[Sequence[SelectionChoiceKey]]
 
+class ExplanationRating(SQLModel, table=True):
+    id: int | None = Field(primary_key=True)
+    self: _ExplainedDifferenceId
+    peer: _ExplainedDifferenceId
+    ai: _ExplainedDifferenceId
+    timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
-class RatingTask(RatingTaskKey):
     @model_validator(mode="after")
-    def _from_same_task(self) -> Self:
-        """
-        Ensure that all selection choices are from the same selection task.
-        """
-        assert all(c.images == self.images for c in self.choices)
+    def _unique_users(self) -> Self:
+        if len({self.self, self.peer, self.ai}) != 3:
+            raise ValueError("All users must be different.")
         return self
 
-    @model_validator(mode="after")
-    def _unique_choices(self) -> Self:
-        choice_keys = [choice.model_dump_json() for choice in self.choices]
-        if len(set(choice_keys)) != len(choice_keys):
-            raise ValueError("All choices must be unique.")
-
-        return self
-
-    @property
-    def images(self):
-        return self.choices[0].images
-
-
-class RatingEvalKey(RatingTaskKey):
-    """A user's evaluations of a rating task."""
-
-    user: UserId
-
-
-class RatingEval(RatingEvalKey):
-    most_convincing: Choice
-    most_likely_ai: Choice | None = None
+    most_convincing: _ExplainedDifferenceId
+    most_likely_ai: _ExplainedDifferenceId
 
     @model_validator(mode="after")
-    def _most_convincing_is_valid(self) -> Self:
-        if self.most_convincing.index < 0 or self.most_convincing.index >= len(
-            self.choices
-        ):
-            raise ValueError("Most convincing index is out of bounds.")
-
-        return self
-
-    @model_validator(mode="after")
-    def _most_likely_ai_is_valid(self) -> Self:
-        if self.most_likely_ai and (
-            self.most_likely_ai.index < 0
-            or self.most_likely_ai.index >= len(self.choices)
-        ):
-            raise ValueError("Most likely AI index is out of bounds.")
-
+    def _valid_choices(self) -> Self:
+        if self.most_convincing not in {self.self, self.peer, self.ai}:
+            raise ValueError("Most convincing user must be one of the three users.")
+        if self.most_likely_ai not in {self.self, self.peer, self.ai}:
+            raise ValueError("Most likely AI user must be one of the three users.")
         return self
 
 
-class SelectionChallenge(BaseModel):
-    dataset_id: DatasetId
-    challenge_id: ChallengeId
-    tasks: NonEmpty[Sequence[SelectionTask]]
+class ExplainDifferenceChallenge(BaseModel):
+    challenge_id: ExplainChallengeId
+    tasks: NonEmpty[Sequence[ExplainDiffernceTask]]
 
-    @property
-    def difficulty(self) -> float:
-        return mean(task.difficulty for task in self.tasks)
+
+class RateTask(BaseModel):
+    self: ExplainedDifferenceId
+    peer: ExplainedDifferenceId
+    ai: ExplainedDifferenceId
+
+
+class RateChallenge(BaseModel):
+    challenge_id: RateChallengeId
+    tasks: NonEmpty[Sequence[RateTask]]
+
+
+if __name__ == "__main__":
+    sqlite_file_name = "database.db"
+    sqlite_url = f"sqlite:///{sqlite_file_name}"
+
+    engine = create_engine(sqlite_url, echo=True)
+
+    SQLModel.metadata.create_all(engine)
