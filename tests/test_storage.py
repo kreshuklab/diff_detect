@@ -1,10 +1,10 @@
 from diff_detect.models import ImageKey, SelectionChoice
 from diff_detect.models_old import CanvasJson
-from diff_detect.storage import (
+from diff_detect.storage_supabase import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
-    DEFAULT_CHALLENGE_ID,
     DATASET_ID_ENV_VAR,
+    DEFAULT_CHALLENGE_ID,
     DEFAULT_DATASET_ID,
     DIFFERENCE_LABEL_STYLES,
     available_dataset_ids,

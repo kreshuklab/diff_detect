@@ -25,7 +25,7 @@ from diff_detect.models import (
     SelectionChoice,
     SelectionChoiceKey,
 )
-from diff_detect.storage import (
+from diff_detect.storage_supabase import (
     CANVAS_HEIGHT,
     CANVAS_WIDTH,
     DEFAULT_DATASET_ID,

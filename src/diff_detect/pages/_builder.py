@@ -1,18 +1,37 @@
+from typing import Literal, assert_never
+
 import streamlit as st
-from st_supabase_connection import SupabaseConnection
+from passlib.hash import pbkdf2_sha256
+from streamlit.navigation.page import StreamlitPage
 
-from diff_detect.app_old import load_challenge_progress, progress_label
-from diff_detect.storage import SupabaseStorage
+from .._state import state
+from ..models import (
+    ActiveTask,
+    ExplainChallenge,
+    RateChallenge,
+    User,
+    UserKind,
+    UserRole,
+)
+from ..storage_sqlite import SqliteStorage
 
-from ._login import configured_login_form
+PageKey = Literal["login", "challenge", "task", "thanks"]
+CHALLENGE_NAMES = {
+    "explain_dummy": "Dummy",
+    "explain_butterfly_easy": "Butterfly Wings (Easy)",
+    "explain_butterfly_difficult": "Butterfly Wings (Difficult)",
+    "rate_dummy": "Dummy",
+    "rate_butterfly_easy": "Butterfly (Easy)",
+    "rate_butterfly_difficult": "Butterfly (Difficult)",
+}
 
 
 class PageBuilder:
     def __init__(self) -> None:
-        self.supabase = st.connection(name="supabase", type=SupabaseConnection)
-        self.storage = SupabaseStorage(self.supabase)
-        if not st.session_state.get("authenticated", False):
-            self.pages = {
+
+        self.storage = SqliteStorage()
+        if not state.user:
+            self.pages: dict[PageKey, StreamlitPage] = {
                 "login": st.Page(
                     self.render_login_page,
                     title="Login",
@@ -24,103 +43,246 @@ class PageBuilder:
         else:
             self.pages = {
                 "challenge": st.Page(
-                    self.render_challenge_page,
+                    self.render_challenge_selection_page,
                     title="Select challenge",
                     icon=":material/list_alt:",
                     url_path="challenge",
                     default=True,
                 ),
-                "selection": st.Page(
-                    self.render_selection_tasks_page,
-                    title="Selection tasks",
-                    icon=":material/rule:",
-                    url_path="selection",
-                ),
-                "rating": st.Page(
-                    self.render_rating_tasks_page,
-                    title="Rating tasks",
-                    icon=":material/rate_review:",
-                    url_path="rating",
-                ),
-                "thanks": st.Page(
-                    self.render_thank_you_page,
-                    title="Thank you",
-                    icon=":material/check_circle:",
-                    url_path="thanks",
+                "task": st.Page(
+                    self.render_task_page,
+                    title="Current task",
+                    icon=":material/psychology_alt:",
+                    url_path="task",
                 ),
             }
-
-    @property
-    def authenticated(self) -> bool:
-        return st.session_state.get("authenticated", False)
-
-    @property
-    def username(self) -> str:
-        if not self.authenticated:
-            self.switch_to("login")
-        username = st.session_state.get("username")
-        if not isinstance(username, str) or not username:
-            st.error("A named account is required.")
-            st.stop()
-        return username
 
     def render_login_page(self) -> None:
         st.title(":butterfly: Welcome to SpeciFly!")
         st.subheader("Can you tell butterfly species apart?")
-        st.write("Please create an account or login.")
-        configured_login_form(self.supabase)
+        if state.user:
+            st.info(f"Logged in as {state.user}.")
+            if st.button("Logout"):
+                state.reset()
+                st.rerun()
 
-    def render_challenge_page(self) -> None:
+            if st.button("Select challenge"):
+                self.switch_to("challenge")
+
+            return
+
+        st.info("Please create an account or login.")
+        login_tab, create_tab = st.tabs(
+            ["Login", "Create account"], key="login_create_tabs", on_change="rerun"
+        )
+        with login_tab, st.form("login_form"):
+            typed_user_id = st.text_input(
+                "Username",
+                key="login_username",
+                max_chars=32,
+                icon=":material/person:",
+            )
+            typed_password = st.text_input(
+                "Password",
+                type="password",
+                key="login_password",
+                max_chars=100,
+                icon=":material/lock:",
+            )
+
+            if st.form_submit_button("Login"):
+                user = self.storage.fetch_user(typed_user_id)
+                if user is None:
+                    st.error(
+                        f"User '{typed_user_id}' not found. Please create an account."
+                    )
+                elif pbkdf2_sha256.verify(typed_password, user.hashed_password):
+                    st.toast(f"Welcome back, {user.id}!")
+                    state.user = user
+                    self.switch_to("challenge")
+                else:
+                    st.error("Incorrect password.")
+
+        st.write(f"typed username: {typed_user_id}")
+        with create_tab, st.form("create_form"):
+            if create_tab.open:
+                typed_new_user_id = st.text_input(
+                    "Username",
+                    value=typed_user_id,
+                    key="create_username",
+                    max_chars=32,
+                    icon=":material/person:",
+                )
+
+                typed_new_password = st.text_input(
+                    "Password",
+                    value=typed_password,
+                    type="password",
+                    key="create_password",
+                    max_chars=100,
+                    icon=":material/lock:",
+                )
+
+                retyped_new_password = st.text_input(
+                    "Retype Password",
+                    type="password",
+                    key="retyped_password",
+                    max_chars=100,
+                    icon=":material/lock:",
+                )
+            else:
+                typed_new_user_id = None
+                typed_new_password = None
+                retyped_new_password = None
+
+            if (
+                st.form_submit_button("Create account", disabled=not typed_new_user_id)
+                and typed_new_user_id
+            ):
+                if not typed_new_password:
+                    st.error("Please enter a password.")
+                    return
+
+                if typed_new_password != retyped_new_password:
+                    st.error("Passwords do not match.")
+                    return
+
+                user = User(
+                    id=typed_new_user_id,
+                    kind=UserKind.HUMAN,
+                    role=UserRole.PARTICIPANT,
+                    hashed_password=pbkdf2_sha256.hash(typed_new_password),
+                )
+                self.storage.add_user(user)
+                st.success(f"Account created for {user.id}!")
+                state.user = user
+                return
+
+    def render_challenge_selection_page(self) -> None:
+        user = self.get_user()
         st.header("Choose a challenge")
-        challenges = self.storage.fetch_challenge_progress
-        if not challenges:
+        challenge_data = self.storage.fetch_challenges(user)
+        if not challenge_data.explain_challenges:
             st.error("No challenges found.")
             st.stop()
 
-        try:
-            progress = load_challenge_progress(self.supabase, self.username, challenges)
-        except Exception as exc:
-            st.error("Failed to load challenge progress.")
-            st.exception(exc)
-            return
+        explain_col, rate_col = st.columns(2)
+        with explain_col:
+            st.subheader("Detect differences")
+        with rate_col:
+            st.subheader("Rate differences")
 
-        progress_by_key = {item.key: item for item in progress}
-        st.dataframe(
-            [
-                {
-                    "Dataset": item.dataset_id,
-                    "Challenge": item.challenge_id,
-                    "Tasks": item.task_count,
-                    "Selections": progress_label(item.submitted_count, item.task_count),
-                    "Ratings": progress_label(item.rated_count, item.task_count),
-                    "Status": challenge_status(item),
-                }
-                for item in progress
-            ],
-            hide_index=True,
-            use_container_width=True,
-        )
+        for (
+            explain_challenge_id,
+            explain_challenge,
+        ) in challenge_data.explain_challenges.items():
+            explain_col, rate_col = st.columns(2)
+            with explain_col:
+                if st.button(
+                    CHALLENGE_NAMES[explain_challenge_id],
+                    key=explain_challenge_id,
+                    disabled=explain_challenge.finished,
+                ):
+                    state.task = ActiveTask(
+                        challenge_data=challenge_data,
+                        challenge_id=explain_challenge_id,
+                        task_idx=challenge_data.explain_challenges[
+                            explain_challenge_id
+                        ].first_undone
+                        or 0,
+                    )
+                    self.switch_to("task")
+                st.progress(
+                    explain_challenge.progress,
+                    text=f"{explain_challenge.done_count}/{explain_challenge.task_count}",
+                )
 
-        selectable_keys = [item.key for item in progress if item.is_selectable]
-        if not selectable_keys:
-            st.error("No playable challenges are available.")
-            return
+            if explain_challenge_id == "explain_dummy":
+                rate_challenge_id = "rate_dummy"
+            elif explain_challenge_id == "explain_butterfly_easy":
+                rate_challenge_id = "rate_butterfly_easy"
+            elif explain_challenge_id == "explain_butterfly_difficult":
+                rate_challenge_id = "rate_butterfly_difficult"
+            else:
+                assert_never(explain_challenge_id)
 
-        preferred_key = preferred_selectable_challenge_key(selectable_keys)
-        selected_key = st.radio(
-            "Challenge",
-            selectable_keys,
-            index=selectable_keys.index(preferred_key),
-            format_func=lambda key: challenge_option_label(progress_by_key[key]),
-        )
-        if st.button("Continue", type="primary"):
-            selected_progress = progress_by_key[selected_key]
-            select_challenge(
-                selected_progress.dataset_id, selected_progress.challenge_id
-            )
-            switch_to(next_page_for_progress(selected_progress))
+            rate_challenge = challenge_data.rate_challenges.get(rate_challenge_id)
+            with rate_col:
+                if (
+                    st.button(
+                        CHALLENGE_NAMES[rate_challenge_id],
+                        key=rate_challenge_id,
+                        disabled=rate_challenge is None or rate_challenge.finished,
+                    )
+                    and rate_challenge is not None
+                ):
+                    state.task = ActiveTask(
+                        challenge_data=challenge_data,
+                        challenge_id=rate_challenge_id,
+                        task_idx=rate_challenge.first_undone or 0,
+                    )
+                    self.switch_to("task")
+                st.progress(
+                    0 if rate_challenge is None else rate_challenge.progress,
+                    text=f"{0 if rate_challenge is None else rate_challenge.done_count}/{explain_challenge.task_count if rate_challenge is None else rate_challenge.task_count}",
+                )
 
-    def switch_to(self, page_key: str) -> None:
+    def render_task_page(self) -> None:
+        task = state.task
+        if not task:
+            st.toast("Please select a challenge first.")
+            self.switch_to("challenge")
+
+        if task.challenge_id in task.challenge_data.explain_challenges:
+            challenge = task.challenge_data.explain_challenges[task.challenge_id]
+            self._render_explain_task(task, challenge)
+        elif task.challenge_id in task.challenge_data.rate_challenges:
+            challenge = task.challenge_data.rate_challenges[task.challenge_id]
+            self._render_rate_task(task, challenge)
+        else:
+            st.error("Challenge state not found.")
+            self.switch_to("challenge")
+
+        bottom_left, bottom_center, bottom_right = st.columns([0.1, 0.8, 0.1])
+        with bottom_left:
+            if task.task_idx > 0:
+                if st.button("Previous task"):
+                    task.task_idx -= 1
+                    st.rerun()
+
+        with bottom_right:
+            if task.task_idx < challenge.task_count - 1:
+                if st.button("Next task"):
+                    task.task_idx += 1
+                    st.rerun()
+            else:
+                if st.button("Finish challenge"):
+                    st.toast(
+                        f"Thank you for finishing {CHALLENGE_NAMES[challenge.id]}!"
+                    )
+                    st.balloons()
+                    self.switch_to("challenge")
+
+    def _render_explain_task(
+        self, task: ActiveTask, challenge: ExplainChallenge
+    ) -> None:
+        st.error("Explain task rendering not implemented yet.")
+
+    def _render_rate_task(self, task: ActiveTask, challenge: RateChallenge) -> None:
+        st.error("Rate task rendering not implemented yet.")
+
+    def get_user(self) -> User:
+        if not state.user:
+            self.switch_to("login")
+
+        user = state.user
+        if not user:
+            st.error("A named account is required for this study.")
+            st.stop()
+
+        return user
+
+    def switch_to(self, page_key: PageKey):
         page = self.pages.get(page_key)
         if page is None:
             st.rerun()

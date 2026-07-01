@@ -6,13 +6,18 @@ data flow:
 from __future__ import annotations
 
 import datetime
+import os
+from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Annotated, Any, Literal, NewType, Sequence, Sized, TypeVar
+from typing import Annotated, Any, Generic, Literal, Sequence, Sized, TypeVar
 
+import streamlit as st
 from annotated_types import MinLen
 from pydantic import BaseModel, model_validator
 from sqlmodel import JSON, Column, Field, SQLModel, create_engine
 from typing_extensions import Self
+
+SQLModel.__table_args__ = {"extend_existing": True}
 
 S = TypeVar("S", bound=Sized)
 NonEmpty = Annotated[S, MinLen(1)]
@@ -22,17 +27,26 @@ NonEmpty = Annotated[S, MinLen(1)]
 #     Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
 # ]
 
-UserId = str
-ExplainedDifferenceId = NewType("ExplainedDifferenceId", int)
 DatasetId = Literal["butterfly"]
 ImageId = str
-TaskId = NewType("TaskId", str)
+RateTaskId = str
+UserId = str
 ExplainChallengeId = Literal[
-    "select_dummy", "select_butterfly_easy", "select_butterfly_difficult"
+    "explain_dummy", "explain_butterfly_easy", "explain_butterfly_difficult"
 ]
+EXPLAIN_CHALLENGE_IDS: Sequence[ExplainChallengeId] = (
+    "explain_dummy",
+    "explain_butterfly_easy",
+    "explain_butterfly_difficult",
+)
 RateChallengeId = Literal[
     "rate_dummy", "rate_butterfly_easy", "rate_butterfly_difficult"
 ]
+RATE_CHALLENGE_IDS: Sequence[RateChallengeId] = (
+    "rate_dummy",
+    "rate_butterfly_easy",
+    "rate_butterfly_difficult",
+)
 ChallengeId = ExplainChallengeId | RateChallengeId
 
 
@@ -43,13 +57,6 @@ class Image(SQLModel, table=True):
     image_info: dict[str, Any] = Field(sa_type=JSON)
     image_group: str
     source: str
-
-
-_ImageId = Annotated[ImageId, Field(foreign_key="image.id")]
-
-
-# class LocalImage(Image):
-#     path: Path
 
 
 class Dataset(BaseModel):
@@ -76,6 +83,7 @@ class User(SQLModel, table=True):
     id: UserId = Field(primary_key=True)
     kind: UserKind
     role: UserRole
+    hashed_password: str
 
 
 _UserId = Annotated[UserId, Field(foreign_key="user.id")]
@@ -87,11 +95,13 @@ _UserId = Annotated[UserId, Field(foreign_key="user.id")]
 #         foreign_key="explaineddifference.id", primary_key=True
 #     )
 
+TaskKey = tuple[ImageId, ImageId, ImageId]
 
-class ExplainDiffernceTask(SQLModel):
-    annotated_image: ImageId
-    reference_image1: ImageId
-    reference_image2: ImageId
+
+class ExplainTask(SQLModel):
+    annotated_image: ImageId = Field(foreign_key="image.id", primary_key=True)
+    reference_image1: ImageId = Field(foreign_key="image.id", primary_key=True)
+    reference_image2: ImageId = Field(foreign_key="image.id", primary_key=True)
 
     @model_validator(mode="before")
     def _order_references(cls, values: dict[str, Any]) -> dict[str, Any]:
@@ -100,10 +110,13 @@ class ExplainDiffernceTask(SQLModel):
         values["reference_image2"] = ref2
         return values
 
+    @property
+    def task_key(self) -> TaskKey:
+        return (self.annotated_image, self.reference_image1, self.reference_image2)
 
-class ExplainedDifference(ExplainDiffernceTask, table=True):
-    id: ExplainedDifferenceId | None = Field(primary_key=True)
-    user: _UserId
+
+class ExplainOutcome(ExplainTask, table=True):
+    user: UserId = Field(foreign_key="user.id", primary_key=True)
     explanation: str | None
     annotations: dict[str, Any] | None = Field(sa_column=Column(JSON))
     timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
@@ -117,56 +130,94 @@ class ExplainedDifference(ExplainDiffernceTask, table=True):
         return self
 
 
-_ExplainedDifferenceId = Annotated[
-    ExplainedDifferenceId, Field(foreign_key="explaineddifference.id")
-]
+class RateTask(ExplainTask):
+    own: UserId = Field(foreign_key="user.id", primary_key=True)
+    peer: UserId = Field(foreign_key="user.id", primary_key=True)
+    ai: UserId = Field(foreign_key="user.id", primary_key=True)
 
 
-class ExplanationRating(SQLModel, table=True):
-    id: int | None = Field(primary_key=True)
-    self: _ExplainedDifferenceId
-    peer: _ExplainedDifferenceId
-    ai: _ExplainedDifferenceId
+class RateOutcome(RateTask, table=True):
     timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
-    @model_validator(mode="after")
-    def _unique_users(self) -> Self:
-        if len({self.self, self.peer, self.ai}) != 3:
-            raise ValueError("All users must be different.")
-        return self
-
-    most_convincing: _ExplainedDifferenceId
-    most_likely_ai: _ExplainedDifferenceId
+    most_convincing: _UserId
+    most_likely_ai: _UserId
 
     @model_validator(mode="after")
     def _valid_choices(self) -> Self:
-        if self.most_convincing not in {self.self, self.peer, self.ai}:
+        if self.most_convincing not in {self.own, self.peer, self.ai}:
             raise ValueError("Most convincing user must be one of the three users.")
-        if self.most_likely_ai not in {self.self, self.peer, self.ai}:
+        if self.most_likely_ai not in {self.own, self.peer, self.ai}:
             raise ValueError("Most likely AI user must be one of the three users.")
         return self
 
 
-class ExplainDifferenceChallenge(BaseModel):
-    challenge_id: ExplainChallengeId
-    tasks: NonEmpty[Sequence[ExplainDiffernceTask]]
+TaskT = TypeVar("TaskT", bound=ExplainTask | RateTask)
 
 
-class RateTask(BaseModel):
-    self: ExplainedDifferenceId
-    peer: ExplainedDifferenceId
-    ai: ExplainedDifferenceId
+@dataclass
+class _ChallengeBase(Generic[TaskT]):
+    tasks: NonEmpty[list[TaskT]]
+
+    @property
+    def task_count(self) -> int:
+        return len(self.tasks)
+
+    @property
+    def done_count(self) -> int:
+        return len([t for t in self.tasks if isinstance(t, ExplainOutcome)])
+
+    @property
+    def finished(self) -> bool:
+        return all(isinstance(t, ExplainOutcome) for t in self.tasks)
+
+    @property
+    def progress(self) -> float:
+        return self.done_count / self.task_count
+
+    @property
+    def first_undone(self) -> int | None:
+        for idx, task in enumerate(self.tasks):
+            if not isinstance(task, ExplainOutcome):
+                return idx
+
+        return None
 
 
-class RateChallenge(BaseModel):
-    challenge_id: RateChallengeId
-    tasks: NonEmpty[Sequence[RateTask]]
+@dataclass
+class ExplainChallenge(_ChallengeBase[ExplainTask | ExplainOutcome]):
+    id: ExplainChallengeId
+
+
+@dataclass
+class RateChallenge(_ChallengeBase[RateTask | RateOutcome]):
+    id: RateChallengeId
+
+
+@dataclass
+class ChallengeData:
+    datasets: dict[DatasetId, Dataset]
+    explain_challenges: dict[ExplainChallengeId, ExplainChallenge]
+    reference_explain_outcomes: dict[tuple[TaskKey, UserId], ExplainOutcome]
+    rate_challenges: dict[RateChallengeId, RateChallenge]
+
+
+@dataclass
+class ActiveTask:
+    challenge_data: ChallengeData
+    challenge_id: ExplainChallengeId | RateChallengeId
+    task_idx: int
+
+
+DEFAULT_SQLITE_URL = "sqlite:///database.db"
+SQLITE_URL = os.environ.get("sqlite_url", DEFAULT_SQLITE_URL)
+
+
+@st.cache_resource(show_spinner="Creating SQLite engine...", show_time=True)
+def get_sqlite_engine():
+    engine = create_engine(SQLITE_URL, echo=True)
+    SQLModel.metadata.create_all(engine)
+    return engine
 
 
 if __name__ == "__main__":
-    sqlite_file_name = "database.db"
-    sqlite_url = f"sqlite:///{sqlite_file_name}"
-
-    engine = create_engine(sqlite_url, echo=True)
-
-    SQLModel.metadata.create_all(engine)
+    _ = get_sqlite_engine()

@@ -4,6 +4,7 @@
 .pytest_cache/
 .streamlit/secrets.toml
 __pycache__/
-data/**/images/
 data/**/download/
+data/**/images/
+database.db
 supabase/.temp/

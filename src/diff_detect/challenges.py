@@ -8,11 +8,12 @@ from typing_extensions import assert_never
 from diff_detect.models import (
     Dataset,
     DatasetId,
+    ExplainChallenge,
     ExplainChallengeId,
-    ExplainDifferenceChallenge,
-    ExplainDiffernceTask,
+    ExplainTask,
     Image,
     ImageId,
+    UserRole,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -28,18 +29,40 @@ DATA_DIR = ROOT / "data"
 #         return _get_rating_challenge(challenge_id, data_dir)
 #     else:
 #         assert_never(challenge_id)
+
+
+def get_available_explain_challenges(
+    user_role: UserRole,
+) -> tuple[dict[DatasetId, Dataset], dict[ExplainChallengeId, ExplainChallenge]]:
+    challenge_ids: list[ExplainChallengeId] = [
+        "explain_butterfly_easy",
+        "explain_butterfly_difficult",
+    ]
+    if user_role == UserRole.MAINTAINER:
+        challenge_ids.insert(0, "explain_dummy")
+
+    challenges: dict[ExplainChallengeId, ExplainChallenge] = {}
+    datasets: dict[DatasetId, Dataset] = {}
+    for cid in challenge_ids:
+        d, c = get_explain_challenge(cid)
+        challenges[c.id] = c
+        datasets.update(d)
+
+    return datasets, challenges
+
+
 @st.cache_data
 def get_explain_challenge(
-    challenge_id: ExplainChallengeId, data_dir: Path
-) -> tuple[dict[DatasetId, Dataset], ExplainDifferenceChallenge]:
+    challenge_id: ExplainChallengeId,
+) -> tuple[dict[DatasetId, Dataset], ExplainChallenge]:
     dataset_id = "butterfly"
-    if challenge_id == "select_dummy":
+    if challenge_id == "explain_dummy":
         index_path = Path("index_dummy.csv")
         difficulty = 0.5
-    elif challenge_id == "select_butterfly_easy":
+    elif challenge_id == "explain_butterfly_easy":
         index_path = Path("index_easy.csv")
         difficulty = 0.25
-    elif challenge_id == "select_butterfly_difficult":
+    elif challenge_id == "explain_butterfly_difficult":
         index_path = Path(
             "index_difficult.csv",
         )
@@ -47,7 +70,7 @@ def get_explain_challenge(
     else:
         assert_never(challenge_id)
 
-    dataset_dir = data_dir / dataset_id
+    dataset_dir = DATA_DIR / dataset_id
     download_dir = dataset_dir / "download"
     if not download_dir.exists():
         download(dataset_id, path=download_dir)
@@ -105,22 +128,22 @@ def get_explain_challenge(
         "Each task must have exactly 3 images."
     )
 
-    tasks: list[ExplainDiffernceTask] = []
+    tasks: list[ExplainTask] = []
     for task_id in sorted(image_groups.keys()):
         group = image_groups[task_id]
         tasks.extend(
             [
-                ExplainDiffernceTask(
+                ExplainTask(
                     annotated_image=group[0].id,
                     reference_image1=group[1].id,
                     reference_image2=group[2].id,
                 ),
-                ExplainDiffernceTask(
+                ExplainTask(
                     annotated_image=group[1].id,
                     reference_image1=group[2].id,
                     reference_image2=group[0].id,
                 ),
-                ExplainDiffernceTask(
+                ExplainTask(
                     annotated_image=group[2].id,
                     reference_image1=group[0].id,
                     reference_image2=group[1].id,
@@ -128,8 +151,8 @@ def get_explain_challenge(
             ]
         )
 
-    return {dataset_id: Dataset(images=images)}, ExplainDifferenceChallenge(
-        challenge_id=challenge_id,
+    return {dataset_id: Dataset(images=images)}, ExplainChallenge(
+        id=challenge_id,
         tasks=tasks,
     )
 
