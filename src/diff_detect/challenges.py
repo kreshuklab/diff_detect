@@ -42,20 +42,24 @@ def get_available_explain_challenges(
         challenge_ids.insert(0, "explain_dummy")
 
     challenges: dict[ExplainChallengeId, ExplainChallenge] = {}
-    datasets: dict[DatasetId, Dataset] = {}
-    for cid in challenge_ids:
-        d, c = get_explain_challenge(cid)
+    merged_datasets: dict[DatasetId, Dataset] = {}
+    for c_id in challenge_ids:
+        datasets, c = get_explain_challenge(c_id)
         challenges[c.id] = c
-        datasets.update(d)
+        for d_id, d in datasets.items():
+            if d_id in merged_datasets:
+                merged_datasets[d_id].images.update(d.images)
+            else:
+                merged_datasets[d_id] = d
 
-    return datasets, challenges
+    return merged_datasets, challenges
 
 
 @st.cache_data
 def get_explain_challenge(
     challenge_id: ExplainChallengeId,
 ) -> tuple[dict[DatasetId, Dataset], ExplainChallenge]:
-    dataset_id = "butterfly"
+    dataset_id = DatasetId.BUTTERFLY
     if challenge_id == "explain_dummy":
         index_path = Path("index_dummy.csv")
         difficulty = 0.5
@@ -108,9 +112,11 @@ def get_explain_challenge(
                 file_url,
                 hybrid_stat,
             ) = line.strip().split(delimiter)
+            print("loaded", image_id)
             image = Image(
-                id=ImageId(f"{dataset_id}/{image_id}"),
-                source=(download_dir / path).relative_to(dataset_dir).as_posix(),
+                dataset_id=dataset_id,
+                image_id=ImageId(image_id),
+                source=(download_dir / path).relative_to(dataset_dir.parent).as_posix(),
                 image_info={
                     "mimic_group": mimic_group,
                     "species": species,
@@ -121,7 +127,7 @@ def get_explain_challenge(
                 },
                 image_group=task_id,
             )
-            images[image.id] = image
+            images[image.image_id] = image
             image_groups.setdefault(task_id, []).append(image)
 
     assert all(len(images) == 3 for images in image_groups.values()), (
@@ -134,19 +140,22 @@ def get_explain_challenge(
         tasks.extend(
             [
                 ExplainTask(
-                    annotated_image=group[0].id,
-                    reference_image1=group[1].id,
-                    reference_image2=group[2].id,
+                    dataset_id=dataset_id,
+                    annotated_image=group[0].image_id,
+                    reference_image1=group[1].image_id,
+                    reference_image2=group[2].image_id,
                 ),
                 ExplainTask(
-                    annotated_image=group[1].id,
-                    reference_image1=group[2].id,
-                    reference_image2=group[0].id,
+                    dataset_id=dataset_id,
+                    annotated_image=group[1].image_id,
+                    reference_image1=group[2].image_id,
+                    reference_image2=group[0].image_id,
                 ),
                 ExplainTask(
-                    annotated_image=group[2].id,
-                    reference_image1=group[0].id,
-                    reference_image2=group[1].id,
+                    dataset_id=dataset_id,
+                    annotated_image=group[2].image_id,
+                    reference_image1=group[0].image_id,
+                    reference_image2=group[1].image_id,
                 ),
             ]
         )

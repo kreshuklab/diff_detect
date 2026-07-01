@@ -2,6 +2,7 @@ import random
 from typing import assert_never
 
 import streamlit as st
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from ._state import state
@@ -26,8 +27,8 @@ from .models import (
 class SqliteStorage:
     """A storage backend for diff-detect that uses Sqlite."""
 
-    def __init__(self):
-        self.engine = get_sqlite_engine()
+    def __init__(self, *, engine: Engine | None = None):
+        self.engine = engine if engine is not None else get_sqlite_engine()
 
     def fetch_user(self, user_id: UserId) -> User | None:
         with Session(self.engine) as session:
@@ -36,7 +37,13 @@ class SqliteStorage:
 
     def add_user(self, user: User) -> None:
         with Session(self.engine) as session:
-            session.add(user.model_copy())
+            session.add(user)
+            session.commit()
+
+    def upsert_explain_outcome(self, outcome: ExplainOutcome) -> None:
+        """Create or replace a user's explanation for one task."""
+        with Session(self.engine) as session:
+            session.merge(outcome)
             session.commit()
 
     def fetch_explain_outcomes(self, user_id: UserId):
@@ -45,7 +52,6 @@ class SqliteStorage:
             statement = select(ExplainOutcome).where(ExplainOutcome.user == user_id)
             explanations = session.exec(statement)
 
-            print(explanations)
             return list(explanations)
 
     def fetch_rate_outcomes(self, user_id: UserId):
@@ -75,7 +81,7 @@ class SqliteStorage:
                     == own_explain_outcome.reference_image1,
                     ExplainOutcome.reference_image2
                     == own_explain_outcome.reference_image2,
-                    ExplainOutcome.user in other_users,
+                    ExplainOutcome.user.in_(other_users),
                 )
                 .limit(10)
             )
@@ -162,6 +168,7 @@ class SqliteStorage:
 
                 tasks.append(
                     RateTask(
+                        dataset_id=explain_outcome.dataset_id,
                         annotated_image=explain_outcome.annotated_image,
                         reference_image1=explain_outcome.reference_image1,
                         reference_image2=explain_outcome.reference_image2,

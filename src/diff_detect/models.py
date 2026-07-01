@@ -13,7 +13,7 @@ from typing import Annotated, Any, Generic, Literal, Sequence, Sized, TypeVar
 
 import streamlit as st
 from annotated_types import MinLen
-from pydantic import BaseModel, model_validator
+from pydantic import model_validator
 from sqlmodel import JSON, Column, Field, SQLModel, create_engine
 from typing_extensions import Self
 
@@ -22,12 +22,15 @@ SQLModel.__table_args__ = {"extend_existing": True}
 S = TypeVar("S", bound=Sized)
 NonEmpty = Annotated[S, MinLen(1)]
 
+
 # _Id = Annotated[
 #     str,
 #     Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
 # ]
+class DatasetId(StrEnum):
+    BUTTERFLY = auto()
 
-DatasetId = Literal["butterfly"]
+
 ImageId = str
 RateTaskId = str
 UserId = str
@@ -53,16 +56,15 @@ ChallengeId = ExplainChallengeId | RateChallengeId
 class Image(SQLModel, table=True):
     """An image in a dataset."""
 
-    id: ImageId = Field(primary_key=True)
+    dataset_id: DatasetId = Field(primary_key=True)
+    image_id: ImageId = Field(primary_key=True)
     image_info: dict[str, Any] = Field(sa_type=JSON)
     image_group: str
     source: str
 
 
-class Dataset(BaseModel):
-    """A list of images in a dataset."""
-
-    # dataset_id: DatasetId
+@dataclass
+class Dataset:
     images: dict[ImageId, Image]
 
     def __getitem__(self, key: ImageId) -> Image:
@@ -89,19 +91,14 @@ class User(SQLModel, table=True):
 _UserId = Annotated[UserId, Field(foreign_key="user.id")]
 
 
-# class ReferenceImage(SQLModel):
-#     image: ImageId = Field(foreign_key="image.id", primary_key=True)
-#     explained_difference: ExplainedDifferenceId = Field(
-#         foreign_key="explaineddifference.id", primary_key=True
-#     )
-
 TaskKey = tuple[ImageId, ImageId, ImageId]
 
 
 class ExplainTask(SQLModel):
-    annotated_image: ImageId = Field(foreign_key="image.id", primary_key=True)
-    reference_image1: ImageId = Field(foreign_key="image.id", primary_key=True)
-    reference_image2: ImageId = Field(foreign_key="image.id", primary_key=True)
+    dataset_id: DatasetId = Field(foreign_key="image.dataset_id")
+    annotated_image: ImageId = Field(foreign_key="image.image_id", primary_key=True)
+    reference_image1: ImageId = Field(foreign_key="image.image_id", primary_key=True)
+    reference_image2: ImageId = Field(foreign_key="image.image_id", primary_key=True)
 
     @model_validator(mode="before")
     def _order_references(cls, values: dict[str, Any]) -> dict[str, Any]:
@@ -164,11 +161,13 @@ class _ChallengeBase(Generic[TaskT]):
 
     @property
     def done_count(self) -> int:
-        return len([t for t in self.tasks if isinstance(t, ExplainOutcome)])
+        return len(
+            [t for t in self.tasks if isinstance(t, (ExplainOutcome, RateOutcome))]
+        )
 
     @property
     def finished(self) -> bool:
-        return all(isinstance(t, ExplainOutcome) for t in self.tasks)
+        return all(isinstance(t, (ExplainOutcome, RateOutcome)) for t in self.tasks)
 
     @property
     def progress(self) -> float:
@@ -177,7 +176,7 @@ class _ChallengeBase(Generic[TaskT]):
     @property
     def first_undone(self) -> int | None:
         for idx, task in enumerate(self.tasks):
-            if not isinstance(task, ExplainOutcome):
+            if not isinstance(task, (ExplainOutcome, RateOutcome)):
                 return idx
 
         return None

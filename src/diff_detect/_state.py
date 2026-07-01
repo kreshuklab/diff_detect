@@ -7,17 +7,25 @@ from .models import (
 
 
 class SessionState:
-    # @property
-    # def typed_user_id(self) -> str | None:
-    #     return st.session_state.get("typed_user_id")
+    @property
+    def task(self) -> ActiveTask | None:
+        return st.session_state.get("task")
 
-    # @typed_user_id.setter
-    # def typed_user_id(self, value: str) -> None:
-    #     st.session_state["typed_user_id"] = value
+    @task.setter
+    def task(self, value: ActiveTask | None) -> None:
+        st.session_state["task"] = value
 
-    # @typed_user_id.deleter
-    # def typed_user_id(self) -> None:
-    #     del st.session_state["typed_user_id"]
+    @property
+    def toaster(self) -> str | None:
+        return st.session_state.get("toaster")
+
+    @toaster.setter
+    def toaster(self, value: str | None) -> None:
+        st.session_state["toaster"] = value
+
+    @toaster.deleter
+    def toaster(self) -> None:
+        del st.session_state["toaster"]
 
     @property
     def user(self) -> User | None:
@@ -30,14 +38,6 @@ class SessionState:
     @user.deleter
     def user(self) -> None:
         del st.session_state["user"]
-
-    @property
-    def task(self) -> ActiveTask | None:
-        return st.session_state.get("task")
-
-    @task.setter
-    def task(self, value: ActiveTask | None) -> None:
-        st.session_state["task"] = value
 
     def reset(self):
         if "user" in st.session_state:
