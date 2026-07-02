@@ -109,25 +109,26 @@ def _invert_canvas_toolbar_icons() -> None:
                                 if (!doc || !doc.head) return;
 
                                 let style = doc.getElementById(STYLE_ID);
-                                if (!applyDarkFix) {
-                                    if (style) style.remove();
-                                    return;
-                                }
-
                                 if (!style) {
                                     style = doc.createElement('style');
                                     style.id = STYLE_ID;
                                     doc.head.appendChild(style);
                                 }
 
-                                const cssText = `
-                                    img[alt="Send to Streamlit"],
-                                    img[alt="Undo"],
-                                    img[alt="Redo"],
-                                    img[alt="Reset canvas & history"] {
-                                        filter: invert(1);
+                                let cssText = `
+                                    img[alt="Send to Streamlit"] {
+                                        display: none !important;
                                     }
                                 `;
+                                if (applyDarkFix) {
+                                    cssText += `
+                                        img[alt="Undo"],
+                                        img[alt="Redo"],
+                                        img[alt="Reset canvas & history"] {
+                                            filter: invert(1);
+                                        }
+                                    `;
+                                }
                                 if (style.textContent !== cssText) {
                                     style.textContent = cssText;
                                 }
