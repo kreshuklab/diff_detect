@@ -20,17 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
 
 
-# def get_challenge(
-#     challenge_id: ChallengeId, data_dir: Path = DATA_DIR
-# ) -> tuple[dict[DatasetId, Dataset], SelectionChallenge]:
-#     if challenge_id in ("select_dummy", "select_butterfly_easy", "select_butterfly_difficult"):
-#         return _get_selection_challenge(challenge_id, data_dir)
-#     elif challenge_id in ("rate_dummy", "rate_butterfly_easy", "rate_butterfly_difficult"):
-#         return _get_rating_challenge(challenge_id, data_dir)
-#     else:
-#         assert_never(challenge_id)
-
-
 def get_available_explain_challenges(
     user_role: UserRole,
 ) -> tuple[dict[DatasetId, Dataset], dict[ExplainChallengeId, ExplainChallenge]]:

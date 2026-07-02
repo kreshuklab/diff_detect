@@ -1,5 +1,5 @@
 import json
-from typing import Any, Literal, assert_never, cast
+from typing import Any, Callable, Literal, assert_never, cast
 
 import streamlit as st
 from passlib.hash import pbkdf2_sha256
@@ -10,13 +10,14 @@ from streamlit_drawable_canvas import st_canvas
 from .._state import state
 from ..challenges import DATA_DIR
 from ..models import (
-    ActiveTask,
+    ActiveExplainChallenge,
+    ActiveRateChallenge,
+    Dataset,
     DatasetId,
-    ExplainChallenge,
     ExplainOutcome,
     Image,
     ImageId,
-    RateChallenge,
+    RateOutcome,
     User,
     UserKind,
     UserRole,
@@ -41,8 +42,6 @@ DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
     "texture": {"color": "#006d77", "fill": "rgba(0, 109, 119, 0.18)"},
 }
 DIFFERENCE_LABELS: tuple[DifferenceLabel, ...] = tuple(DIFFERENCE_LABEL_STYLES)
-CANVAS_WIDTH = 600
-CANVAS_HEIGHT = 400
 
 
 def _json_ready(value: Any) -> dict[str, Any]:
@@ -74,10 +73,6 @@ def _canvas_object_dicts(canvas_json: Any | None) -> list[dict[str, Any]]:
     return [item for item in objects if isinstance(item, dict)]
 
 
-def _canvas_has_objects(canvas_json: Any | None) -> bool:
-    return bool(_canvas_object_dicts(canvas_json))
-
-
 def _canvas_labels(
     canvas_json: Any | None, fallback_label: DifferenceLabel | None = None
 ) -> list[DifferenceLabel]:
@@ -95,8 +90,9 @@ def _canvas_labels(
         if label and label not in labels:
             labels.append(label)
 
-    if not labels and fallback_label and _canvas_has_objects(canvas_json):
+    if not labels and fallback_label and _canvas_object_dicts(canvas_json):
         labels.append(fallback_label)
+
     return labels
 
 
@@ -112,7 +108,7 @@ def _annotation_labels(annotations: dict[str, Any] | None) -> list[str]:
 def _build_annotation_payload(
     canvas_json: Any | None, fallback_label: DifferenceLabel
 ) -> dict[str, Any] | None:
-    if not _canvas_has_objects(canvas_json):
+    if not _canvas_object_dicts(canvas_json):
         return None
     serialized_canvas_json = _json_ready(canvas_json)
     return {
@@ -140,7 +136,7 @@ def _render_image_placeholder(height: int) -> None:
     )
 
 
-@st.cache_data(max_entries=200)
+@st.cache_data(max_entries=100, show_spinner=True)
 def _load_study_image(image: Image) -> PILImage.Image:
     path = DATA_DIR / image.source
     assert path.exists(), f"Image file not found: {path}"
@@ -157,52 +153,53 @@ class PageBuilder:
             st.toast(state.toaster)
             del state.toaster
 
-        if not state.user:
-            self.pages: dict[PageKey, StreamlitPage] = {
-                "login": st.Page(
-                    self.render_login_page,
-                    title="Login",
-                    icon=":material/login:",
-                    url_path="login",
-                    default=True,
+        self.pages: dict[PageKey, StreamlitPage] = {
+            "login": st.Page(
+                self.render_login_page,
+                title="Login",
+                icon=":material/login:",
+                url_path="login",
+                default=state.user is None,
+            ),
+            "challenge": st.Page(
+                self.render_challenge_selection_page,
+                title="Select challenge",
+                icon=":material/list_alt:",
+                url_path="challenge",
+                default=state.user is not None,
+            ),
+            "task": st.Page(
+                self.render_task_page,
+                title="Current task",
+                icon=":material/psychology_alt:",
+                url_path="task",
+            ),
+        }
+        if state.user is not None:
+            with st.sidebar:
+                st.info(f"Logged in as {state.user.id}.")
+                st.button(
+                    "Logout",
+                    on_click=state.reset,
+                    type="secondary",
+                    width="stretch",
+                    icon=":material/logout:",
                 )
-            }
-        else:
-            self.pages = {
-                "challenge": st.Page(
-                    self.render_challenge_selection_page,
-                    title="Select challenge",
-                    icon=":material/list_alt:",
-                    url_path="challenge",
-                    default=True,
-                ),
-                "task": st.Page(
-                    self.render_task_page,
-                    title="Current task",
-                    icon=":material/psychology_alt:",
-                    url_path="task",
-                ),
-            }
-            st.sidebar.button(
-                "Logout",
-                on_click=state.reset,
-                type="secondary",
-                width="stretch",
-                icon=":material/logout:",
-            )
 
     def render_login_page(self) -> None:
         st.set_page_config(layout="centered")
         st.title(":butterfly: Welcome to SpeciFly!")
         st.subheader("Can you tell butterfly species apart?")
         if state.user:
-            st.info(f"Logged in as {state.user}.")
-            if st.button("Logout"):
-                state.reset()
-                st.rerun()
-
-            if st.button("Select challenge"):
-                self.switch_to("challenge")
+            st.info(f"Logged in as {state.user.id}.")
+            left, right = st.columns(2)
+            with left:
+                if st.button("Logout", width="stretch", type="secondary"):
+                    state.reset()
+                    st.rerun()
+            with right:
+                if st.button("Select challenge", width="stretch"):
+                    self.switch_to("challenge")
 
             return
 
@@ -210,7 +207,7 @@ class PageBuilder:
         login_tab, create_tab = st.tabs(
             ["Login", "Create account"], key="login_create_tabs", on_change="rerun"
         )
-        with login_tab, st.form("login_form"):
+        with login_tab, st.form("login_form", enter_to_submit=False):
             typed_user_id = st.text_input(
                 "Username",
                 key="login_username",
@@ -239,7 +236,7 @@ class PageBuilder:
                 else:
                     st.error("Incorrect password.")
 
-        with create_tab, st.form("create_form"):
+        with create_tab, st.form("create_form", enter_to_submit=False):
             if create_tab.open:
                 typed_new_user_id = st.text_input(
                     "Username",
@@ -263,17 +260,23 @@ class PageBuilder:
                     type="password",
                     key="retyped_password",
                     max_chars=100,
-                    icon=":material/lock:",
+                    icon=":material/enhanced_encryption:",
                 )
             else:
                 typed_new_user_id = None
                 typed_new_password = None
                 retyped_new_password = None
 
-            if (
-                st.form_submit_button("Create account", disabled=not typed_new_user_id)
-                and typed_new_user_id
-            ):
+            if st.form_submit_button("Create account"):
+                if not typed_new_user_id:
+                    st.error("Please enter a username.")
+                    return
+
+                user = self.storage.fetch_user(typed_new_user_id)
+                if user is not None:
+                    st.error("Username already exists.")
+                    return
+
                 if not typed_new_password:
                     st.error("Please enter a password.")
                     return
@@ -319,14 +322,11 @@ class PageBuilder:
                     key=explain_challenge_id,
                     disabled=explain_challenge.finished,
                 ):
-                    state.task = ActiveTask(
-                        challenge_data=challenge_data,
-                        challenge_id=explain_challenge_id,
-                        task_idx=challenge_data.explain_challenges[
-                            explain_challenge_id
-                        ].first_undone
-                        or 0,
+                    # challenge = challenge_data.explain_challenges[explain_challenge_id]
+                    state.active_challenge = ActiveExplainChallenge(
+                        challenge_data=challenge_data, challenge_id=explain_challenge_id
                     )
+                    state.task_idx = explain_challenge.first_undone or 0
                     self.switch_to("task")
                 st.progress(
                     explain_challenge.progress,
@@ -342,7 +342,7 @@ class PageBuilder:
             else:
                 assert_never(explain_challenge_id)
 
-            rate_challenge = challenge_data.rate_challenges.get(rate_challenge_id)
+            rate_challenge = challenge_data.challenges.get(rate_challenge_id)
             with rate_col:
                 if (
                     st.button(
@@ -352,11 +352,10 @@ class PageBuilder:
                     )
                     and rate_challenge is not None
                 ):
-                    state.task = ActiveTask(
-                        challenge_data=challenge_data,
-                        challenge_id=rate_challenge_id,
-                        task_idx=rate_challenge.first_undone or 0,
+                    state.active_challenge = ActiveRateChallenge(
+                        challenge_data=challenge_data, challenge_id=rate_challenge_id
                     )
+                    state.task_idx = rate_challenge.first_undone or 0
                     self.switch_to("task")
                 st.progress(
                     0 if rate_challenge is None else rate_challenge.progress,
@@ -364,36 +363,78 @@ class PageBuilder:
                 )
 
     def render_task_page(self) -> None:
-        st.set_page_config(layout="wide")
-        task = state.task
-        if not task:
+        active = state.active_challenge
+        if not active:
             state.toaster = "Please select a challenge first."
             self.switch_to("challenge")
 
-        if task.challenge_id in task.challenge_data.explain_challenges:
-            challenge = task.challenge_data.explain_challenges[task.challenge_id]
-            self._render_explain_task(task, challenge)
-        elif task.challenge_id in task.challenge_data.rate_challenges:
-            challenge = task.challenge_data.rate_challenges[task.challenge_id]
-            self._render_rate_task(task, challenge)
+        st.set_page_config(initial_sidebar_state="collapsed", layout="wide")
+
+        if isinstance(active, ActiveExplainChallenge):
+            challenge = active.challenge_data.explain_challenges[active.challenge_id]
+            save = self._render_explain_task(active)
+        elif isinstance(active, ActiveRateChallenge):
+            challenge = active.challenge_data.challenges[active.challenge_id]
+            save = self._render_rate_task(active)
         else:
             st.error("Challenge state not found.")
             self.switch_to("challenge")
 
-        bottom_left, bottom_center, bottom_right = st.columns([0.1, 0.8, 0.1])
+        bottom_left, bottom_center, bottom_right = st.columns(
+            [0.1, 0.8, 0.1], vertical_alignment="bottom"
+        )
         with bottom_left:
-            if task.task_idx > 0:
-                if st.button("Previous task"):
-                    task.task_idx -= 1
+            if state.task_idx > 0:
+                if st.button("Previous", width="stretch"):
+                    save()
+                    state.task_idx -= 1
                     st.rerun()
 
+        with bottom_center:
+            task_cols = st.columns(
+                [1 for _ in range(0, state.task_idx)]
+                + [2]
+                + [1 for _ in range(state.task_idx + 1, challenge.task_count)],
+                gap="xxsmall",
+                vertical_alignment="center",
+            )
+            for idx, col in enumerate(task_cols):
+                with col:
+                    if st.button(
+                        str(idx + 1) if idx == state.task_idx else "",
+                        help=f"Task {idx + 1}",
+                        key=f"task_button_{idx}",
+                        width="stretch",
+                        type="primary"
+                        if idx == state.task_idx
+                        # else "secondary"
+                        # if isinstance(
+                        #     challenge.tasks[idx], (ExplainOutcome, RateOutcome)
+                        # )
+                        else "tertiary",
+                        icon=":material/check_box:"
+                        if isinstance(
+                            challenge.tasks[idx], (ExplainOutcome, RateOutcome)
+                        )
+                        else ":material/check_box_outline_blank:",
+                        icon_position="left",
+                    ):
+                        save()
+                        state.task_idx = idx
+                        st.rerun()
+            # st.progress(
+            #     challenge.progress,
+            #     text=f"{CHALLENGE_NAMES[challenge.id]} - {challenge.done_count}/{challenge.task_count}",
+            # )
         with bottom_right:
-            if task.task_idx < challenge.task_count - 1:
-                if st.button("Next task"):
-                    task.task_idx += 1
+            if state.task_idx < challenge.task_count - 1:
+                if st.button("Next", width="stretch"):
+                    save()
+                    state.task_idx += 1
                     st.rerun()
             else:
-                if st.button("Finish challenge"):
+                if st.button("Finish", width="stretch"):
+                    save()
                     toast = f"Thank you for finishing {CHALLENGE_NAMES[challenge.id]}!"
                     # show toast immediately
                     st.toast(toast)
@@ -404,57 +445,49 @@ class PageBuilder:
                     self.switch_to("challenge")
 
     def _render_explain_task(
-        self, task: ActiveTask, challenge: ExplainChallenge
-    ) -> None:
+        self, active: ActiveExplainChallenge
+    ) -> Callable[[], None]:
         user = self.get_user()
-        explain_task = challenge.tasks[task.task_idx]
+        explain_task = active.challenge.tasks[state.task_idx]
 
-        try:
-            annotated_image = self._image_for_id(
-                task, explain_task.dataset_id, explain_task.annotated_image
-            )
-            reference_specs = [
-                self._image_for_id(
-                    task, explain_task.dataset_id, explain_task.reference_image1
-                ),
-                self._image_for_id(
-                    task, explain_task.dataset_id, explain_task.reference_image2
-                ),
-            ]
-        except KeyError as exc:
-            st.error(str(exc))
-            st.stop()
-
-        st.header("Explain the visible difference")
-        st.caption(
-            f"{CHALLENGE_NAMES[challenge.id]} - "
-            f"task {task.task_idx + 1} of {challenge.task_count}"
+        annotated_image = self._get_image(
+            active.challenge_data.datasets,
+            explain_task.dataset_id,
+            explain_task.annotated_image,
         )
-        st.progress(
-            challenge.progress,
-            text=f"{challenge.done_count}/{challenge.task_count} submitted",
-        )
+        reference_specs = [
+            self._get_image(
+                active.challenge_data.datasets,
+                explain_task.dataset_id,
+                explain_task.reference_image1,
+            ),
+            self._get_image(
+                active.challenge_data.datasets,
+                explain_task.dataset_id,
+                explain_task.reference_image2,
+            ),
+        ]
 
-        left, right = st.columns([3, 1])
+        left, right = st.columns([2, 1])
+        with left:
+            subleft, subright = st.columns([1, 1], vertical_alignment="bottom")
+            with subleft:
+                st.subheader("Annotate visual biological differences")
+            with subright:
+                label = st.radio(
+                    "Active difference label",
+                    DIFFERENCE_LABELS,
+                    label_visibility="collapsed",
+                    format_func=_label_display,
+                    horizontal=True,
+                    key=f"explain_label_{active.challenge.id}_{state.task_idx}",
+                )
         with right:
+            st.subheader("References")
             self._render_reference_images(reference_specs)
 
-        if isinstance(explain_task, ExplainOutcome):
-            with left:
-                st.image(
-                    _load_study_image(annotated_image),
-                    width="stretch",
-                )
-                st.info("This task has already been submitted.")
-                labels = _annotation_labels(explain_task.annotations)
-                if labels:
-                    st.caption("Labels: " + ", ".join(labels))
-                if explain_task.explanation:
-                    st.write(explain_task.explanation)
-            return
-
         canvas_widget_key = (
-            f"explain_canvas_{challenge.id}_{task.task_idx}_"
+            f"explain_canvas_{active.challenge.id}_{state.task_idx}_"
             f"{explain_task.annotated_image}"
         )
         canvas_state_key = f"{canvas_widget_key}_json"
@@ -468,17 +501,6 @@ class PageBuilder:
         )
 
         with left:
-            label = cast(
-                DifferenceLabel,
-                st.radio(
-                    "Active difference label",
-                    DIFFERENCE_LABELS,
-                    format_func=_label_display,
-                    horizontal=True,
-                    key=f"explain_label_{challenge.id}_{task.task_idx}",
-                ),
-            )
-            canvas_slot = st.empty()
             annotated_canvas_image = _load_study_image(annotated_image)
 
             if initial_canvas_json is None:
@@ -486,20 +508,40 @@ class PageBuilder:
             else:
                 initial_drawing = initial_canvas_json
 
-            with canvas_slot:
-                canvas_result = st_canvas(
-                    fill_color=DIFFERENCE_LABEL_STYLES[label]["fill"],
-                    stroke_width=8,
-                    stroke_color=DIFFERENCE_LABEL_STYLES[label]["color"],
-                    background_image=cast(Any, annotated_canvas_image.convert("RGB")),
-                    update_streamlit=True,
-                    height=CANVAS_HEIGHT,
-                    width=CANVAS_WIDTH,
-                    drawing_mode="freedraw",
-                    display_toolbar=True,
-                    key=canvas_widget_key,
-                    initial_drawing=initial_drawing,  # pyright: ignore[reportArgumentType]
+            original_canvas_width, original_canvas_height = annotated_canvas_image.size
+            canvas_scale = 0.23
+            canvas_width = round(original_canvas_width * canvas_scale)
+            canvas_height = round(original_canvas_height * canvas_scale)
+            # canvas_width = 1000
+            # canvas_height = 567
+            if (
+                abs(
+                    (original_ratio := original_canvas_width / original_canvas_height)
+                    - (canvas_ratio := canvas_width / canvas_height)
                 )
+                > 0.02
+            ):
+                st.warning(
+                    f"Canvas aspect ratio {original_ratio:.2f} ({original_canvas_width} x {original_canvas_height}) "
+                    f"does not match display size {canvas_ratio:.2f} ({canvas_width} x {canvas_height})."
+                )
+
+            annotated_canvas_image = annotated_canvas_image.resize(
+                (canvas_width, canvas_height), resample=PILImage.Resampling.LANCZOS
+            )
+            canvas_result = st_canvas(
+                fill_color=DIFFERENCE_LABEL_STYLES[label]["fill"],
+                stroke_width=8,
+                stroke_color=DIFFERENCE_LABEL_STYLES[label]["color"],
+                background_image=annotated_canvas_image,  # pyright: ignore[reportArgumentType]
+                update_streamlit=True,
+                height=canvas_height,
+                width=canvas_width,
+                drawing_mode="freedraw",
+                display_toolbar=True,
+                key=canvas_widget_key,
+                initial_drawing=initial_drawing,  # pyright: ignore[reportArgumentType]
+            )
             if canvas_result.json_data is not None:
                 st.session_state[canvas_state_key] = canvas_result.json_data
             current_canvas_json = cast(
@@ -507,70 +549,57 @@ class PageBuilder:
                 canvas_result.json_data or st.session_state.get(canvas_state_key),
             )
 
-            explanation_key = (
-                f"explain_text_{challenge.id}_{task.task_idx}_"
-                f"{explain_task.annotated_image}"
+        explanation_key = (
+            f"explain_text_{active.challenge.id}_{state.task_idx}_"
+            f"{explain_task.annotated_image}"
+        )
+        explanation = st.text_input(
+            "Optional Explanation",
+            width="stretch",
+            placeholder="Describe the visible difference from the references.",
+            key=explanation_key,
+            max_chars=244,
+        )
+
+        def save() -> None:
+            annotation_payload = _build_annotation_payload(current_canvas_json, label)
+            cleaned_explanation = explanation.strip()
+            if annotation_payload is None and not cleaned_explanation:
+                return
+
+            outcome = ExplainOutcome(
+                dataset_id=explain_task.dataset_id,
+                annotated_image=explain_task.annotated_image,
+                reference_image1=explain_task.reference_image1,
+                reference_image2=explain_task.reference_image2,
+                user=user.id,
+                explanation=cleaned_explanation or None,
+                annotations=annotation_payload,
             )
-            explanation = st.text_area(
-                "Explanation",
-                placeholder="Describe the visible difference from the references.",
-                key=explanation_key,
-            )
+            self.storage.upsert_explain_outcome(outcome)
 
-            if st.button(
-                "Save explanation",
-                type="primary",
-                width="stretch",
-                key=f"save_explain_{challenge.id}_{task.task_idx}",
-            ):
-                annotation_payload = _build_annotation_payload(
-                    current_canvas_json, label
-                )
-                cleaned_explanation = explanation.strip()
-                if annotation_payload is None and not cleaned_explanation:
-                    st.warning(
-                        "Please add an annotation or write an explanation before saving."
-                    )
-                    return
+            active.challenge.tasks[state.task_idx] = outcome
+            state.active_challenge = active  # update session state with the new outcome
+            st.session_state.pop(canvas_state_key, None)
+            st.session_state.pop(explanation_key, None)
+            state.toaster = "Explanation saved."
 
-                outcome = ExplainOutcome(
-                    dataset_id=explain_task.dataset_id,
-                    annotated_image=explain_task.annotated_image,
-                    reference_image1=explain_task.reference_image1,
-                    reference_image2=explain_task.reference_image2,
-                    user=user.id,
-                    explanation=cleaned_explanation or None,
-                    annotations=annotation_payload,
-                )
-                try:
-                    self.storage.upsert_explain_outcome(outcome)
-                except Exception as exc:
-                    st.error("Could not save the explanation.")
-                    st.exception(exc)
-                    return
+        return save
 
-                challenge.tasks[task.task_idx] = outcome
-                st.session_state.pop(canvas_state_key, None)
-                st.session_state.pop(explanation_key, None)
-                state.toaster = "Explanation saved."
-                next_undone = challenge.first_undone
-                if next_undone is not None:
-                    task.task_idx = next_undone
-                    st.rerun()
-
-                state.task = None
-                self.switch_to("challenge")
-
-    def _render_rate_task(self, task: ActiveTask, challenge: RateChallenge) -> None:
+    def _render_rate_task(self, task: ActiveRateChallenge) -> Callable[[], None]:
         st.error("Rate task rendering not implemented yet.")
+        return lambda: None
 
-    def _image_for_id(
-        self, task: ActiveTask, dataset_id: DatasetId, image_id: ImageId
+    def _get_image(
+        self,
+        datasets: dict[DatasetId, Dataset],
+        dataset_id: DatasetId,
+        image_id: ImageId,
     ) -> Image:
-        if dataset_id not in task.challenge_data.datasets:
+        if dataset_id not in datasets:
             raise KeyError(f"Dataset '{dataset_id}' missing in active task.")
 
-        dataset = task.challenge_data.datasets[dataset_id]
+        dataset = datasets[dataset_id]
         image = dataset.images.get(image_id)
         if image is None:
             raise KeyError(
@@ -580,12 +609,9 @@ class PageBuilder:
 
         return image
 
-    def _render_reference_images(self, image_specs: list[Image]) -> None:
-        st.subheader("References")
-        slots = [st.empty() for _ in image_specs]
-        for slot, image in zip(slots, image_specs):
-            with slot:
-                st.image(_load_study_image(image), width="stretch")
+    def _render_reference_images(self, images: list[Image]) -> None:
+        for image in images:
+            st.image(_load_study_image(image), width="stretch")
 
     def get_user(self) -> User:
         if not state.user:

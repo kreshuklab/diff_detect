@@ -9,7 +9,7 @@ import datetime
 import os
 from dataclasses import dataclass
 from enum import StrEnum, auto
-from typing import Annotated, Any, Generic, Literal, Sequence, Sized, TypeVar
+from typing import Annotated, Any, Generic, Literal, Sequence, Sized, TypeVar, cast
 
 import streamlit as st
 from annotated_types import MinLen
@@ -23,10 +23,6 @@ S = TypeVar("S", bound=Sized)
 NonEmpty = Annotated[S, MinLen(1)]
 
 
-# _Id = Annotated[
-#     str,
-#     Predicate(lambda s: bool(s) and all(c.isalnum() or c in "_-" for c in s)),
-# ]
 class DatasetId(StrEnum):
     BUTTERFLY = auto()
 
@@ -195,16 +191,44 @@ class RateChallenge(_ChallengeBase[RateTask | RateOutcome]):
 @dataclass
 class ChallengeData:
     datasets: dict[DatasetId, Dataset]
-    explain_challenges: dict[ExplainChallengeId, ExplainChallenge]
     reference_explain_outcomes: dict[tuple[TaskKey, UserId], ExplainOutcome]
-    rate_challenges: dict[RateChallengeId, RateChallenge]
+    challenges: dict[ChallengeId, ExplainChallenge | RateChallenge]
+
+    @property
+    def explain_challenges(self) -> dict[ExplainChallengeId, ExplainChallenge]:
+        return {
+            cast(ExplainChallengeId, k): v
+            for k, v in self.challenges.items()
+            if k in EXPLAIN_CHALLENGE_IDS and isinstance(v, ExplainChallenge)
+        }
+
+    @property
+    def rate_challenges(self) -> dict[RateChallengeId, RateChallenge]:
+        return {
+            cast(RateChallengeId, k): v
+            for k, v in self.challenges.items()
+            if k in RATE_CHALLENGE_IDS and isinstance(v, RateChallenge)
+        }
 
 
 @dataclass
-class ActiveTask:
+class ActiveExplainChallenge:
     challenge_data: ChallengeData
-    challenge_id: ExplainChallengeId | RateChallengeId
-    task_idx: int
+    challenge_id: ExplainChallengeId
+
+    @property
+    def challenge(self) -> ExplainChallenge:
+        return cast(ExplainChallenge, self.challenge_data.challenges[self.challenge_id])
+
+
+@dataclass
+class ActiveRateChallenge:
+    challenge_data: ChallengeData
+    challenge_id: RateChallengeId
+
+    @property
+    def challenge(self) -> RateChallenge:
+        return cast(RateChallenge, self.challenge_data.challenges[self.challenge_id])
 
 
 DEFAULT_SQLITE_URL = "sqlite:///database.db"

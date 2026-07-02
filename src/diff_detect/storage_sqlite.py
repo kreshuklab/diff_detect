@@ -9,10 +9,11 @@ from ._state import state
 from .challenges import get_available_explain_challenges
 from .models import (
     ChallengeData,
+    ChallengeId,
+    ExplainChallenge,
     ExplainOutcome,
     ExplainTask,
     RateChallenge,
-    RateChallengeId,
     RateOutcome,
     RateTask,
     TaskKey,
@@ -91,10 +92,9 @@ class SqliteStorage:
             else:
                 return random.choice(list(peer_ratings))
 
-    # @st.cache_data(ttl=30)
     def fetch_challenges(self, user: User) -> ChallengeData:
-        if state.task:
-            return state.task.challenge_data
+        if state.active_challenge:
+            return state.active_challenge.challenge_data
 
         datasets, explain_challenges = get_available_explain_challenges(
             user_role=user.role
@@ -114,7 +114,9 @@ class SqliteStorage:
 
         rate_outcomes = {out.task_key: out for out in self.fetch_rate_outcomes(user.id)}
 
-        rate_challenges: dict[RateChallengeId, RateChallenge] = {}
+        challenges: dict[ChallengeId, ExplainChallenge | RateChallenge] = {
+            k: v for k, v in explain_challenges.items()
+        }
         reference_explain_outcomes: dict[tuple[TaskKey, UserId], ExplainOutcome] = {}
         for explain_id, explain_challenge in explain_challenges.items():
             if not explain_challenge.finished:
@@ -178,11 +180,10 @@ class SqliteStorage:
                     ),
                 )
 
-            rate_challenges[rate_id] = RateChallenge(id=rate_id, tasks=tasks)
+            challenges[rate_id] = RateChallenge(id=rate_id, tasks=tasks)
 
         return ChallengeData(
             datasets=datasets,
-            explain_challenges=explain_challenges,
             reference_explain_outcomes=reference_explain_outcomes,
-            rate_challenges=rate_challenges,
+            challenges=challenges,
         )
