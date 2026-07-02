@@ -71,11 +71,11 @@ def _label_display(label: DifferenceLabel) -> str:
 
 def _invert_canvas_toolbar_icons() -> None:
     """Adjust drawable-canvas toolbar icon colors for the active Streamlit theme."""
-    st.html(
-        """
+    script = """
                 <script>
                 (function() {
                     const STYLE_ID = 'diff-detect-toolbar-theme-style';
+                    const THEME_KEY = 'diff-detect-theme-mode';
 
                     function parseRgb(value) {
                         const match = String(value || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
@@ -89,16 +89,16 @@ def _invert_canvas_toolbar_icons() -> None:
                             const app = parentDoc.querySelector('.stApp') || parentDoc.body;
                             const bg = getComputedStyle(app).backgroundColor || getComputedStyle(parentDoc.body).backgroundColor;
                             const rgb = parseRgb(bg);
-                            if (!rgb) return true;
+                            if (!rgb) return false;
                             const luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
                             return luminance < 140;
                         } catch (_) {
-                            return true;
+                            return false;
                         }
                     }
 
                     function apply() {
-                        const invertFilter = isDarkTheme() ? 'invert(1)' : 'none';
+                        const applyDarkFix = isDarkTheme();
                         const frames = window.parent.document.querySelectorAll(
                             'iframe[title="streamlit_drawable_canvas.st_canvas"]'
                         );
@@ -109,32 +109,58 @@ def _invert_canvas_toolbar_icons() -> None:
                                 if (!doc || !doc.head) return;
 
                                 let style = doc.getElementById(STYLE_ID);
+                                if (!applyDarkFix) {
+                                    if (style) style.remove();
+                                    return;
+                                }
+
                                 if (!style) {
                                     style = doc.createElement('style');
                                     style.id = STYLE_ID;
                                     doc.head.appendChild(style);
                                 }
 
-                                style.textContent = `
+                                const cssText = `
                                     img[alt="Send to Streamlit"],
                                     img[alt="Undo"],
                                     img[alt="Redo"],
                                     img[alt="Reset canvas & history"] {
-                                        filter: ${invertFilter};
+                                        filter: invert(1);
                                     }
                                 `;
+                                if (style.textContent !== cssText) {
+                                    style.textContent = cssText;
+                                }
                             } catch (_) {
                                 // Ignore cross-frame timing/access issues.
                             }
                         });
                     }
 
+                    function syncThemeAndReloadIfNeeded() {
+                        try {
+                            const mode = isDarkTheme() ? 'dark' : 'light';
+                            const previousMode = window.parent.sessionStorage.getItem(THEME_KEY);
+                            if (previousMode && previousMode !== mode) {
+                                window.parent.sessionStorage.setItem(THEME_KEY, mode);
+                                window.parent.location.reload();
+                                return true;
+                            }
+                            window.parent.sessionStorage.setItem(THEME_KEY, mode);
+                        } catch (_) {
+                            // Ignore storage/access failures.
+                        }
+                        return false;
+                    }
+
+                    if (syncThemeAndReloadIfNeeded()) return;
                     apply();
                     setTimeout(apply, 250);
-                    setTimeout(apply, 1000);
                 })();
                 </script>
-                """,
+                """
+    st.html(
+        script,
         width="content",
         unsafe_allow_javascript=True,
     )
