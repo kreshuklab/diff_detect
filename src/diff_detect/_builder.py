@@ -1,5 +1,4 @@
-import json
-from typing import Any, Callable, Literal, assert_never, cast
+from typing import Any, Callable, Literal, assert_never
 
 import streamlit as st
 from passlib.hash import pbkdf2_sha256
@@ -7,9 +6,9 @@ from PIL import Image as PILImage
 from streamlit.navigation.page import StreamlitPage
 from streamlit_drawable_canvas import st_canvas
 
-from .._state import state
-from ..challenges import DATA_DIR
-from ..models import (
+from ._state import state
+from .challenges import DATA_DIR
+from .models import (
     ActiveExplainChallenge,
     ActiveRateChallenge,
     Dataset,
@@ -22,7 +21,7 @@ from ..models import (
     UserKind,
     UserRole,
 )
-from ..storage_sqlite import SqliteStorage
+from .storage_sqlite import SqliteStorage
 
 st.set_page_config(page_title="SpeciFly", page_icon=":butterfly:")
 
@@ -35,104 +34,109 @@ CHALLENGE_NAMES = {
     "rate_butterfly_easy": "Butterfly (Easy)",
     "rate_butterfly_difficult": "Butterfly (Difficult)",
 }
-DifferenceLabel = Literal["shape", "color", "texture"]
+DifferenceLabel = Literal["wing outline", "color"]
 DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
-    "shape": {"color": "#ffb000", "fill": "rgba(255, 176, 0, 0.2)"},
+    "wing outline": {"color": "#ffb000", "fill": "rgba(255, 176, 0, 0.2)"},
     "color": {"color": "#e83e8c", "fill": "rgba(232, 62, 140, 0.18)"},
-    "texture": {"color": "#006d77", "fill": "rgba(0, 109, 119, 0.18)"},
 }
 DIFFERENCE_LABELS: tuple[DifferenceLabel, ...] = tuple(DIFFERENCE_LABEL_STYLES)
 
 
-def _json_ready(value: Any) -> dict[str, Any]:
-    serialized = json.loads(json.dumps(value))
-    if not isinstance(serialized, dict):
-        raise TypeError("Expected a JSON object.")
-    return serialized
-
-
-def _latest_canvas_widget_json(canvas_widget_key: str) -> dict[str, Any] | None:
-    component_value = st.session_state.get(canvas_widget_key)
-    if not isinstance(component_value, dict):
+def _canvas_state_without_data(canvas_state: Any | None) -> dict[str, Any] | None:
+    if not isinstance(canvas_state, dict):
         return None
-    raw = component_value.get("raw")
-    return raw if isinstance(raw, dict) else None
 
-
-def _canvas_object_dicts(canvas_json: Any | None) -> list[dict[str, Any]]:
-    if canvas_json is None:
-        return []
-    if hasattr(canvas_json, "objects"):
-        return [
-            item.model_dump(mode="json") if hasattr(item, "model_dump") else dict(item)
-            for item in canvas_json.objects
-        ]
-    if not isinstance(canvas_json, dict):
-        return []
-    objects = canvas_json.get("objects", [])
-    return [item for item in objects if isinstance(item, dict)]
-
-
-def _canvas_labels(
-    canvas_json: Any | None, fallback_label: DifferenceLabel | None = None
-) -> list[DifferenceLabel]:
-    if not canvas_json:
-        return [fallback_label] if fallback_label else []
-
-    label_by_color: dict[str, DifferenceLabel] = {
-        style["color"].lower(): label
-        for label, style in DIFFERENCE_LABEL_STYLES.items()
+    stripped_canvas_state = {
+        key: value for key, value in canvas_state.items() if key != "data"
     }
-    labels: list[DifferenceLabel] = []
-    for item in _canvas_object_dicts(canvas_json):
-        stroke = str(item.get("stroke", "")).lower()
-        label = label_by_color.get(stroke)
-        if label and label not in labels:
-            labels.append(label)
-
-    if not labels and fallback_label and _canvas_object_dicts(canvas_json):
-        labels.append(fallback_label)
-
-    return labels
-
-
-def _annotation_labels(annotations: dict[str, Any] | None) -> list[str]:
-    if not annotations:
-        return []
-    labels = annotations.get("labels")
-    if isinstance(labels, list):
-        return [str(label) for label in labels if str(label)]
-    return []
+    return stripped_canvas_state
 
 
 def _build_annotation_payload(
-    canvas_json: Any | None, fallback_label: DifferenceLabel
+    canvas_state: Any | None,
 ) -> dict[str, Any] | None:
-    if not _canvas_object_dicts(canvas_json):
+    if not isinstance(canvas_state, dict):
         return None
-    serialized_canvas_json = _json_ready(canvas_json)
-    return {
-        "mode": "single_canvas_color_coded_labels",
-        "labels": _canvas_labels(serialized_canvas_json, fallback_label),
-        "canvas_json": serialized_canvas_json,
-    }
+
+    if not isinstance((raw := canvas_state.get("raw")), dict) or not any(
+        isinstance(item, dict) for item in raw.get("objects", [])
+    ):
+        return None
+    return _canvas_state_without_data(canvas_state)
 
 
 def _label_display(label: DifferenceLabel) -> str:
     return label.title()
 
 
-def _render_image_placeholder(height: int) -> None:
-    st.markdown(
-        f"""
-        <div style="
-            height: {height}px;
-            width: 100%;
-            border: 1px solid rgba(49, 51, 63, 0.16);
-            background: rgba(250, 250, 250, 0.92);
-        "></div>
-        """,
-        unsafe_allow_html=True,
+def _invert_canvas_toolbar_icons() -> None:
+    """Adjust drawable-canvas toolbar icon colors for the active Streamlit theme."""
+    st.html(
+        """
+                <script>
+                (function() {
+                    const STYLE_ID = 'diff-detect-toolbar-theme-style';
+
+                    function parseRgb(value) {
+                        const match = String(value || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
+                        if (!match) return null;
+                        return [Number(match[1]), Number(match[2]), Number(match[3])];
+                    }
+
+                    function isDarkTheme() {
+                        try {
+                            const parentDoc = window.parent.document;
+                            const app = parentDoc.querySelector('.stApp') || parentDoc.body;
+                            const bg = getComputedStyle(app).backgroundColor || getComputedStyle(parentDoc.body).backgroundColor;
+                            const rgb = parseRgb(bg);
+                            if (!rgb) return true;
+                            const luminance = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+                            return luminance < 140;
+                        } catch (_) {
+                            return true;
+                        }
+                    }
+
+                    function apply() {
+                        const invertFilter = isDarkTheme() ? 'invert(1)' : 'none';
+                        const frames = window.parent.document.querySelectorAll(
+                            'iframe[title="streamlit_drawable_canvas.st_canvas"]'
+                        );
+
+                        frames.forEach((frame) => {
+                            try {
+                                const doc = frame.contentDocument || frame.contentWindow?.document;
+                                if (!doc || !doc.head) return;
+
+                                let style = doc.getElementById(STYLE_ID);
+                                if (!style) {
+                                    style = doc.createElement('style');
+                                    style.id = STYLE_ID;
+                                    doc.head.appendChild(style);
+                                }
+
+                                style.textContent = `
+                                    img[alt="Send to Streamlit"],
+                                    img[alt="Undo"],
+                                    img[alt="Redo"],
+                                    img[alt="Reset canvas & history"] {
+                                        filter: ${invertFilter};
+                                    }
+                                `;
+                            } catch (_) {
+                                // Ignore cross-frame timing/access issues.
+                            }
+                        });
+                    }
+
+                    apply();
+                    setTimeout(apply, 250);
+                    setTimeout(apply, 1000);
+                })();
+                </script>
+                """,
+        width="content",
+        unsafe_allow_javascript=True,
     )
 
 
@@ -140,7 +144,13 @@ def _render_image_placeholder(height: int) -> None:
 def _load_study_image(image: Image) -> PILImage.Image:
     path = DATA_DIR / image.source
     assert path.exists(), f"Image file not found: {path}"
-    return PILImage.open(path).convert("RGB")
+    rgba_image = PILImage.open(path).convert("RGBA")
+    theme_base = st.get_option("theme.base")
+    if theme_base == "light":
+        background = PILImage.new("RGBA", rgba_image.size, (245, 247, 250, 255))
+    else:
+        background = PILImage.new("RGBA", rgba_image.size, (0, 0, 0, 255))
+    return PILImage.alpha_composite(background, rgba_image).convert("RGB")
 
 
 class PageBuilder:
@@ -246,6 +256,16 @@ class PageBuilder:
                     icon=":material/person:",
                 )
 
+                lab = st.selectbox(
+                    "Lab",
+                    options=["Kreshuklab"],
+                    index=None,
+                    key="create_lab",
+                    # max_chars=32,
+                    # icon=":material/science:",
+                    accept_new_options=True,
+                )
+
                 typed_new_password = st.text_input(
                     "Password",
                     value=typed_password,
@@ -264,6 +284,7 @@ class PageBuilder:
                 )
             else:
                 typed_new_user_id = None
+                lab = None
                 typed_new_password = None
                 retyped_new_password = None
 
@@ -287,14 +308,16 @@ class PageBuilder:
 
                 user = User(
                     id=typed_new_user_id,
+                    lab=lab or "Guest",
                     kind=UserKind.HUMAN,
                     role=UserRole.PARTICIPANT,
                     hashed_password=pbkdf2_sha256.hash(typed_new_password),
                 )
+                state.toaster = f"Welcome {user.id}!"
                 self.storage.add_user(user)
                 st.success(f"Account created for {typed_new_user_id}!")
                 state.user = user
-                return
+                self.switch_to("challenge")
 
     def render_challenge_selection_page(self) -> None:
         st.set_page_config(layout="centered")
@@ -486,34 +509,34 @@ class PageBuilder:
             st.subheader("References")
             self._render_reference_images(reference_specs)
 
-        canvas_widget_key = (
+        canvas_state = (
             f"explain_canvas_{active.challenge.id}_{state.task_idx}_"
-            f"{explain_task.annotated_image}"
+            f"{explain_task.annotated_image}_state"
         )
-        canvas_state_key = f"{canvas_widget_key}_json"
-        latest_widget_json = _latest_canvas_widget_json(canvas_widget_key)
-        if latest_widget_json is not None:
-            st.session_state[canvas_state_key] = latest_widget_json
+        stored_canvas_state = (
+            explain_task.annotations
+            if isinstance(explain_task, ExplainOutcome)
+            else None
+        )
+        should_seed_initial_drawing = (
+            canvas_state not in st.session_state and stored_canvas_state is not None
+        )
+        if should_seed_initial_drawing:
+            st.session_state[canvas_state] = stored_canvas_state
 
-        initial_canvas_json = st.session_state.get(canvas_state_key)
-        assert initial_canvas_json is None or isinstance(initial_canvas_json, dict), (
-            "Canvas state must be a dict or None."
-        )
+        initial_drawing = None
+        if isinstance(stored_canvas_state, dict) and should_seed_initial_drawing:
+            raw = stored_canvas_state.get("raw")
+            if isinstance(raw, dict):
+                initial_drawing = raw
 
         with left:
             annotated_canvas_image = _load_study_image(annotated_image)
-
-            if initial_canvas_json is None:
-                initial_drawing = None
-            else:
-                initial_drawing = initial_canvas_json
 
             original_canvas_width, original_canvas_height = annotated_canvas_image.size
             canvas_scale = 0.23
             canvas_width = round(original_canvas_width * canvas_scale)
             canvas_height = round(original_canvas_height * canvas_scale)
-            # canvas_width = 1000
-            # canvas_height = 567
             if (
                 abs(
                     (original_ratio := original_canvas_width / original_canvas_height)
@@ -529,7 +552,7 @@ class PageBuilder:
             annotated_canvas_image = annotated_canvas_image.resize(
                 (canvas_width, canvas_height), resample=PILImage.Resampling.LANCZOS
             )
-            canvas_result = st_canvas(
+            st_canvas(
                 fill_color=DIFFERENCE_LABEL_STYLES[label]["fill"],
                 stroke_width=8,
                 stroke_color=DIFFERENCE_LABEL_STYLES[label]["color"],
@@ -539,15 +562,11 @@ class PageBuilder:
                 width=canvas_width,
                 drawing_mode="freedraw",
                 display_toolbar=True,
-                key=canvas_widget_key,
+                key=canvas_state,
                 initial_drawing=initial_drawing,  # pyright: ignore[reportArgumentType]
             )
-            if canvas_result.json_data is not None:
-                st.session_state[canvas_state_key] = canvas_result.json_data
-            current_canvas_json = cast(
-                dict[str, Any] | None,
-                canvas_result.json_data or st.session_state.get(canvas_state_key),
-            )
+            _invert_canvas_toolbar_icons()
+            current_canvas_state = st.session_state.get(canvas_state)
 
         explanation_key = (
             f"explain_text_{active.challenge.id}_{state.task_idx}_"
@@ -562,7 +581,7 @@ class PageBuilder:
         )
 
         def save() -> None:
-            annotation_payload = _build_annotation_payload(current_canvas_json, label)
+            annotation_payload = _build_annotation_payload(current_canvas_state)
             cleaned_explanation = explanation.strip()
             if annotation_payload is None and not cleaned_explanation:
                 return
@@ -579,8 +598,8 @@ class PageBuilder:
             self.storage.upsert_explain_outcome(outcome)
 
             active.challenge.tasks[state.task_idx] = outcome
-            state.active_challenge = active  # update session state with the new outcome
-            st.session_state.pop(canvas_state_key, None)
+            state.active_challenge = active
+            st.session_state.pop(canvas_state, None)
             st.session_state.pop(explanation_key, None)
             state.toaster = "Explanation saved."
 

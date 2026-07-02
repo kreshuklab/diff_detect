@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel, create_engine
 
+from diff_detect._builder import _annotation_canvas_json, _build_annotation_payload
 from diff_detect.models import (
     DatasetId,
     ExplainChallenge,
@@ -12,7 +13,6 @@ from diff_detect.models import (
     UserKind,
     UserRole,
 )
-from diff_detect.pages._builder import _build_annotation_payload
 from diff_detect.storage_sqlite import SqliteStorage
 
 
@@ -22,11 +22,11 @@ def test_build_annotation_payload_preserves_canvas_json_and_labels():
         "objects": [{"type": "path", "stroke": "#e83e8c"}],
     }
 
-    payload = _build_annotation_payload(canvas_json, "shape")
+    payload = _build_annotation_payload(canvas_json, "wing outline")
 
     assert payload == {
         "mode": "single_canvas_color_coded_labels",
-        "labels": ["color"],
+        "labels": ["wing outline"],
         "canvas_json": canvas_json,
     }
 
@@ -34,16 +34,42 @@ def test_build_annotation_payload_preserves_canvas_json_and_labels():
 def test_build_annotation_payload_uses_fallback_label_for_uncolored_strokes():
     payload = _build_annotation_payload(
         {"objects": [{"type": "path"}]},
-        "texture",
+        "wing outline",
     )
 
     assert payload is not None
-    assert payload["labels"] == ["texture"]
+    assert payload["labels"] == ["wing outline"]
 
 
 def test_build_annotation_payload_returns_none_without_objects():
-    assert _build_annotation_payload({"objects": []}, "shape") is None
-    assert _build_annotation_payload(None, "shape") is None
+    assert _build_annotation_payload({"objects": []}, "wing outline") is None
+    assert _build_annotation_payload(None, "wing outline") is None
+
+
+def test_annotation_canvas_json_extracts_canvas_from_saved_payload():
+    canvas_json = {"version": "4.4.0", "objects": [{"type": "path"}]}
+    annotations = {
+        "mode": "single_canvas_color_coded_labels",
+        "labels": ["wing outline"],
+        "canvas_json": canvas_json,
+    }
+
+    restored = _annotation_canvas_json(annotations)
+
+    assert restored == canvas_json
+    assert restored is not canvas_json
+
+
+def test_annotation_canvas_json_supports_legacy_annotation_list():
+    canvas_json = {"version": "4.4.0", "objects": [{"type": "path"}]}
+
+    assert _annotation_canvas_json([{"canvas_json": canvas_json}]) == canvas_json
+
+
+def test_annotation_canvas_json_ignores_missing_canvas_json():
+    assert _annotation_canvas_json(None) is None
+    assert _annotation_canvas_json({}) is None
+    assert _annotation_canvas_json({"canvas_json": []}) is None
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):

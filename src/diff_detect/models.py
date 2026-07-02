@@ -79,6 +79,7 @@ class UserKind(StrEnum):
 
 class User(SQLModel, table=True):
     id: UserId = Field(primary_key=True)
+    lab: str
     kind: UserKind
     role: UserRole
     hashed_password: str
