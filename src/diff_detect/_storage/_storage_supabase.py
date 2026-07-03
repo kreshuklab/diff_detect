@@ -1,6 +1,6 @@
 from st_supabase_connection import SupabaseConnection
 
-from .models import UserId
+from ..models import UserId
 
 
 class SupabaseStorage:

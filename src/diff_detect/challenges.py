@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import streamlit as st
+from PIL import Image as PILImage
 from typing_extensions import assert_never
 
 from diff_detect.models import (
@@ -160,3 +161,22 @@ def download(dataset_id: DatasetId, path: Path) -> None:
     raise NotImplementedError("The download function is not implemented yet.")
 
     assert path.exists(), f"Failed to download dataset {dataset_id} to {path}."
+
+
+# @st.cache_data(max_entries=100) # cache here to dynamically adapt background to light/dark theme choice
+def _load_study_image_impl(image: Image) -> PILImage.Image:
+    path = DATA_DIR / image.source
+    assert path.exists(), f"Image file not found: {path}"
+    rgba_image = PILImage.open(path).convert("RGBA")
+    return rgba_image
+
+
+@st.cache_data(max_entries=100)
+def load_study_image(image: Image) -> PILImage.Image:
+    rgba_image = _load_study_image_impl(image)
+    theme_base = st.get_option("theme.base")
+    if theme_base == "light":
+        background = PILImage.new("RGBA", rgba_image.size, (245, 247, 250, 255))
+    else:
+        background = PILImage.new("RGBA", rgba_image.size, (0, 0, 0, 255))
+    return PILImage.alpha_composite(background, rgba_image).convert("RGB")

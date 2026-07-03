@@ -16,9 +16,11 @@ from annotated_types import MinLen
 from pydantic import (
     BaseModel,
     ConfigDict,
-    Field as PydanticField,
     TypeAdapter,
     model_validator,
+)
+from pydantic import (
+    Field as PydanticField,
 )
 from sqlalchemy import TypeDecorator
 from sqlmodel import JSON, Column, Field, SQLModel, create_engine
@@ -121,10 +123,11 @@ class UserKind(StrEnum):
 
 class User(SQLModel, table=True):
     id: UserId = Field(primary_key=True)
-    lab: str
+    name: str
+    lab: str | None
     kind: UserKind
     role: UserRole
-    hashed_password: str
+    hashed_password: str | None
 
 
 _UserId = Annotated[UserId, Field(foreign_key="user.id")]
@@ -156,7 +159,6 @@ class CanvasObject(BaseModel):
 
     type: str = ""
     stroke: str | None = None
-    fill: str | None = None
 
 
 class CanvasJson(BaseModel):
@@ -200,6 +202,14 @@ class ExplainOutcome(ExplainTask, table=True):
                 "At least one annotation or an explanation must be provided."
             )
         return self
+
+    def as_explain_task(self) -> ExplainTask:
+        return ExplainTask(
+            dataset_id=self.dataset_id,
+            annotated_image=self.annotated_image,
+            reference_image1=self.reference_image1,
+            reference_image2=self.reference_image2,
+        )
 
 
 class RateTask(ExplainTask):

@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, create_engine
 
-from diff_detect._builder import _build_annotation_payload, _canvas_initial_drawing
+from diff_detect._storage._storage_sqlite import SqliteStorage
+from diff_detect._task_page import _build_annotation_payload
 from diff_detect.models import (
     Annotation,
     DatasetId,
@@ -14,7 +15,6 @@ from diff_detect.models import (
     UserKind,
     UserRole,
 )
-from diff_detect.storage_sqlite import SqliteStorage
 
 
 def test_build_annotation_payload_strips_canvas_image_data():
@@ -37,7 +37,11 @@ def test_build_annotation_payload_preserves_fabric_object_extras():
     raw = {
         "version": "4.4.0",
         "objects": [
-            {"type": "path", "stroke": "#e83e8c", "path": [["M", 1, 2]]}
+            {
+                "type": "path",
+                "stroke": "#e83e8c",
+                "path": [["M", 1, 2]],
+            }
         ],
     }
 
@@ -47,27 +51,31 @@ def test_build_annotation_payload_preserves_fabric_object_extras():
     assert payload.raw.objects[0].model_extra == {"path": [["M", 1, 2]]}
 
 
-def test_build_annotation_payload_returns_none_without_objects():
-    assert (
-        _build_annotation_payload({"data": "image", "raw": {"objects": []}}) is None
-    )
-    assert _build_annotation_payload({"objects": [{"type": "path"}]}) is None
-    assert _build_annotation_payload(None) is None
-
-
-def test_canvas_initial_drawing_falls_back_to_stored_annotation():
+def test_build_annotation_payload_preserves_free_draw_path_fill():
     raw = {
         "version": "4.4.0",
-        "objects": [{"type": "path", "stroke": "#e83e8c"}],
+        "objects": [
+            {
+                "type": "Path",
+                "stroke": "#e83e8c",
+                "fill": None,
+            }
+        ],
     }
 
-    initial_drawing = _canvas_initial_drawing(Annotation.model_validate({"raw": raw}))
+    payload = _build_annotation_payload({"data": "image", "raw": raw})
 
-    assert initial_drawing == raw
+    assert payload is not None
+    dumped = payload.model_dump(mode="json", exclude_unset=True)
+    assert dumped["raw"]["objects"] == [
+        {"type": "Path", "stroke": "#e83e8c", "fill": None}
+    ]
 
 
-def test_canvas_initial_drawing_is_empty_without_stored_annotation():
-    assert _canvas_initial_drawing(None) is None
+def test_build_annotation_payload_returns_none_without_objects():
+    assert _build_annotation_payload({"data": "image", "raw": {"objects": []}}) is None
+    assert _build_annotation_payload({"objects": [{"type": "path"}]}) is None
+    assert _build_annotation_payload(None) is None
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):
@@ -77,6 +85,7 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
     storage.add_user(
         User(
             id="ada",
+            name="Ada",
             lab="lab",
             kind=UserKind.HUMAN,
             role=UserRole.PARTICIPANT,
@@ -109,6 +118,7 @@ def test_sqlite_storage_round_trips_annotation_model(tmp_path):
     storage.add_user(
         User(
             id="ada",
+            name="Ada",
             lab="lab",
             kind=UserKind.HUMAN,
             role=UserRole.PARTICIPANT,
@@ -118,7 +128,12 @@ def test_sqlite_storage_round_trips_annotation_model(tmp_path):
     raw = {
         "version": "4.4.0",
         "objects": [
-            {"type": "path", "stroke": "#e83e8c", "path": [["M", 1, 2]]}
+            {
+                "type": "path",
+                "stroke": "#e83e8c",
+                "fill": None,
+                "path": [["M", 1, 2]],
+            }
         ],
     }
     outcome = ExplainOutcome(
@@ -135,9 +150,37 @@ def test_sqlite_storage_round_trips_annotation_model(tmp_path):
 
     stored_annotation = storage.fetch_explain_outcomes("ada")[0].annotation
     assert isinstance(stored_annotation, Annotation)
-    assert stored_annotation.model_dump(mode="json", exclude_none=True) == {
-        "raw": raw
-    }
+
+
+def test_sqlite_storage_deletes_explain_outcome(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(
+        User(
+            id="ada",
+            name="Ada",
+            lab="lab",
+            kind=UserKind.HUMAN,
+            role=UserRole.PARTICIPANT,
+            hashed_password="hash",
+        )
+    )
+    raw = {"version": "4.4.0", "objects": [{"type": "path", "stroke": "#e83e8c"}]}
+    outcome = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation=None,
+        annotation=Annotation.model_validate({"data": "image", "raw": raw}),
+    )
+
+    storage.upsert_explain_outcome(outcome)
+    assert storage.fetch_explain_outcomes("ada") == [outcome]
+    storage.delete_explain_outcome(outcome)
+    assert storage.fetch_explain_outcomes("ada") == []
 
 
 def test_challenge_progress_counts_matching_outcome_type():

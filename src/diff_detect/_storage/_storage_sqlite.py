@@ -2,12 +2,12 @@ import random
 from typing import assert_never
 
 import streamlit as st
-from sqlalchemy import Engine
+from sqlalchemy import Engine, delete
 from sqlmodel import Session, select
 
-from ._state import state
-from .challenges import get_available_explain_challenges
-from .models import (
+from .._state import state
+from ..challenges import get_available_explain_challenges
+from ..models import (
     ChallengeData,
     ChallengeId,
     ExplainChallenge,
@@ -36,6 +36,12 @@ class SqliteStorage:
             statement = select(User).where(User.id == user_id)
             return session.exec(statement).first()
 
+    def fetch_lab_options(self) -> list[str]:
+        with Session(self.engine) as session:
+            statement = select(User.lab).distinct()
+            labs = session.exec(statement)
+            return [lab for lab in labs if lab is not None]
+
     def add_user(self, user: User) -> None:
         with Session(self.engine, expire_on_commit=False) as session:
             session.add(user)
@@ -45,6 +51,18 @@ class SqliteStorage:
         """Create or replace a user's explanation for one task."""
         with Session(self.engine) as session:
             session.merge(outcome)
+            session.commit()
+
+    def delete_explain_outcome(self, outcome: ExplainOutcome) -> None:
+        """Delete a user's explanation for one task."""
+        with Session(self.engine) as session:
+            statement = delete(ExplainOutcome).where(
+                ExplainOutcome.annotated_image == outcome.annotated_image,
+                ExplainOutcome.reference_image1 == outcome.reference_image1,
+                ExplainOutcome.reference_image2 == outcome.reference_image2,
+                ExplainOutcome.user == outcome.user,
+            )
+            session.exec(statement)
             session.commit()
 
     def fetch_explain_outcomes(self, user_id: UserId):

@@ -1,5 +1,2 @@
-[theme.dark]
+[theme]
 base = "dark"
-
-[theme.light]
-base = "light"
