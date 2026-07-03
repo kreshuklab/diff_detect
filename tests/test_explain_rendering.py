@@ -1,7 +1,8 @@
 from sqlmodel import SQLModel, create_engine
 
-from diff_detect._builder import _annotation_canvas_json, _build_annotation_payload
+from diff_detect._builder import _build_annotation_payload, _canvas_initial_drawing
 from diff_detect.models import (
+    Annotation,
     DatasetId,
     ExplainChallenge,
     ExplainOutcome,
@@ -16,60 +17,57 @@ from diff_detect.models import (
 from diff_detect.storage_sqlite import SqliteStorage
 
 
-def test_build_annotation_payload_preserves_canvas_json_and_labels():
-    canvas_json = {
+def test_build_annotation_payload_strips_canvas_image_data():
+    raw = {
         "version": "4.4.0",
         "objects": [{"type": "path", "stroke": "#e83e8c"}],
     }
 
-    payload = _build_annotation_payload(canvas_json, "wing outline")
-
-    assert payload == {
-        "mode": "single_canvas_color_coded_labels",
-        "labels": ["wing outline"],
-        "canvas_json": canvas_json,
-    }
-
-
-def test_build_annotation_payload_uses_fallback_label_for_uncolored_strokes():
     payload = _build_annotation_payload(
-        {"objects": [{"type": "path"}]},
-        "wing outline",
+        {"data": "data:image/png;base64,large-rendered-payload", "raw": raw}
     )
 
+    assert isinstance(payload, Annotation)
+    dumped = payload.model_dump(mode="json", exclude_none=True)
+    assert dumped == {"raw": raw}
+    assert "data" not in dumped
+
+
+def test_build_annotation_payload_preserves_fabric_object_extras():
+    raw = {
+        "version": "4.4.0",
+        "objects": [
+            {"type": "path", "stroke": "#e83e8c", "path": [["M", 1, 2]]}
+        ],
+    }
+
+    payload = _build_annotation_payload({"data": "image", "raw": raw})
+
     assert payload is not None
-    assert payload["labels"] == ["wing outline"]
+    assert payload.raw.objects[0].model_extra == {"path": [["M", 1, 2]]}
 
 
 def test_build_annotation_payload_returns_none_without_objects():
-    assert _build_annotation_payload({"objects": []}, "wing outline") is None
-    assert _build_annotation_payload(None, "wing outline") is None
+    assert (
+        _build_annotation_payload({"data": "image", "raw": {"objects": []}}) is None
+    )
+    assert _build_annotation_payload({"objects": [{"type": "path"}]}) is None
+    assert _build_annotation_payload(None) is None
 
 
-def test_annotation_canvas_json_extracts_canvas_from_saved_payload():
-    canvas_json = {"version": "4.4.0", "objects": [{"type": "path"}]}
-    annotations = {
-        "mode": "single_canvas_color_coded_labels",
-        "labels": ["wing outline"],
-        "canvas_json": canvas_json,
+def test_canvas_initial_drawing_falls_back_to_stored_annotation():
+    raw = {
+        "version": "4.4.0",
+        "objects": [{"type": "path", "stroke": "#e83e8c"}],
     }
 
-    restored = _annotation_canvas_json(annotations)
+    initial_drawing = _canvas_initial_drawing(Annotation.model_validate({"raw": raw}))
 
-    assert restored == canvas_json
-    assert restored is not canvas_json
-
-
-def test_annotation_canvas_json_supports_legacy_annotation_list():
-    canvas_json = {"version": "4.4.0", "objects": [{"type": "path"}]}
-
-    assert _annotation_canvas_json([{"canvas_json": canvas_json}]) == canvas_json
+    assert initial_drawing == raw
 
 
-def test_annotation_canvas_json_ignores_missing_canvas_json():
-    assert _annotation_canvas_json(None) is None
-    assert _annotation_canvas_json({}) is None
-    assert _annotation_canvas_json({"canvas_json": []}) is None
+def test_canvas_initial_drawing_is_empty_without_stored_annotation():
+    assert _canvas_initial_drawing(None) is None
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):
@@ -79,6 +77,7 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
     storage.add_user(
         User(
             id="ada",
+            lab="lab",
             kind=UserKind.HUMAN,
             role=UserRole.PARTICIPANT,
             hashed_password="hash",
@@ -91,7 +90,7 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
         reference_image2="butterfly/c",
         user="ada",
         explanation="first",
-        annotations=None,
+        annotation=None,
     )
     second = first.model_copy(update={"explanation": "second"})
 
@@ -101,6 +100,44 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
     outcomes = storage.fetch_explain_outcomes("ada")
     assert len(outcomes) == 1
     assert outcomes[0].explanation == "second"
+
+
+def test_sqlite_storage_round_trips_annotation_model(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(
+        User(
+            id="ada",
+            lab="lab",
+            kind=UserKind.HUMAN,
+            role=UserRole.PARTICIPANT,
+            hashed_password="hash",
+        )
+    )
+    raw = {
+        "version": "4.4.0",
+        "objects": [
+            {"type": "path", "stroke": "#e83e8c", "path": [["M", 1, 2]]}
+        ],
+    }
+    outcome = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation=None,
+        annotation=Annotation.model_validate({"data": "image", "raw": raw}),
+    )
+
+    storage.upsert_explain_outcome(outcome)
+
+    stored_annotation = storage.fetch_explain_outcomes("ada")[0].annotation
+    assert isinstance(stored_annotation, Annotation)
+    assert stored_annotation.model_dump(mode="json", exclude_none=True) == {
+        "raw": raw
+    }
 
 
 def test_challenge_progress_counts_matching_outcome_type():
@@ -114,7 +151,7 @@ def test_challenge_progress_counts_matching_outcome_type():
                 reference_image2="butterfly/c",
                 user="ada",
                 explanation="done",
-                annotations=None,
+                annotation=None,
             ),
             ExplainTask(
                 dataset_id=DatasetId.BUTTERFLY,

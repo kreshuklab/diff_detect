@@ -13,7 +13,14 @@ from typing import Annotated, Any, Generic, Literal, Sequence, Sized, TypeVar, c
 
 import streamlit as st
 from annotated_types import MinLen
-from pydantic import model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field as PydanticField,
+    TypeAdapter,
+    model_validator,
+)
+from sqlalchemy import TypeDecorator
 from sqlmodel import JSON, Column, Field, SQLModel, create_engine
 from typing_extensions import Self
 
@@ -47,6 +54,41 @@ RATE_CHALLENGE_IDS: Sequence[RateChallengeId] = (
     "rate_butterfly_difficult",
 )
 ChallengeId = ExplainChallengeId | RateChallengeId
+
+
+class PydanticJson(TypeDecorator):
+    """Allows a pydantic model to be stored as a JSON column in SQLModel.
+
+    Example usage:
+    ```python
+    class Nested(BaseModel):
+        value: str
+
+    class Parent(SQLModel, table=True):
+        id: int = Field(primary_key=True, default=None)
+        nested: Nested | None = Field(sa_column=Column(PydanticJson(Nested)))
+        nested_list: list[Nested] = Field(sa_column=Column(PydanticJson(list[Nested])))
+    ```
+    """
+
+    impl = JSON()
+    cache_ok = True
+
+    def __init__(self, pt: Any) -> None:
+        super().__init__()
+        self.pt = TypeAdapter(pt)
+
+    def process_bind_param(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+
+        return self.pt.dump_python(value, mode="json")
+
+    def process_result_value(self, value: Any, dialect: Any) -> Any:
+        if value is None:
+            return None
+
+        return self.pt.validate_python(value)
 
 
 class Image(SQLModel, table=True):
@@ -109,15 +151,51 @@ class ExplainTask(SQLModel):
         return (self.annotated_image, self.reference_image1, self.reference_image2)
 
 
+class CanvasObject(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    type: str = ""
+    stroke: str | None = None
+    fill: str | None = None
+
+
+class CanvasJson(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    version: str = ""
+    objects: list[CanvasObject] = PydanticField(default_factory=list)
+    background: str | None = None
+
+
+class Annotation(BaseModel):
+    """Persisted drawable-canvas state, excluding rendered image data."""
+
+    model_config = ConfigDict(extra="allow")
+
+    raw: CanvasJson
+
+    @model_validator(mode="before")
+    @classmethod
+    def _remove_image_data(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "data" not in value:
+            return value
+
+        return {key: item for key, item in value.items() if key != "data"}
+
+    @property
+    def has_objects(self) -> bool:
+        return bool(self.raw.objects)
+
+
 class ExplainOutcome(ExplainTask, table=True):
     user: UserId = Field(foreign_key="user.id", primary_key=True)
     explanation: str | None
-    annotations: dict[str, Any] | None = Field(sa_column=Column(JSON))
+    annotation: Annotation | None = Field(sa_column=Column(PydanticJson(Annotation)))
     timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
     @model_validator(mode="after")
     def _annotations_or_explanation(self) -> Self:
-        if not self.annotations and not self.explanation:
+        if not self.annotation and not self.explanation:
             raise ValueError(
                 "At least one annotation or an explanation must be provided."
             )

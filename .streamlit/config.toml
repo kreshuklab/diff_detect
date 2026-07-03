@@ -1,0 +1,5 @@
+[theme.dark]
+base = "dark"
+
+[theme.light]
+base = "light"

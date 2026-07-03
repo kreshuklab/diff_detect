@@ -37,7 +37,7 @@ class SqliteStorage:
             return session.exec(statement).first()
 
     def add_user(self, user: User) -> None:
-        with Session(self.engine) as session:
+        with Session(self.engine, expire_on_commit=False) as session:
             session.add(user)
             session.commit()
 

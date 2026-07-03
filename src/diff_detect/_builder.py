@@ -3,6 +3,7 @@ from typing import Any, Callable, Literal, assert_never
 import streamlit as st
 from passlib.hash import pbkdf2_sha256
 from PIL import Image as PILImage
+from pydantic import ValidationError
 from streamlit.navigation.page import StreamlitPage
 from streamlit_drawable_canvas import st_canvas
 
@@ -11,6 +12,7 @@ from .challenges import DATA_DIR
 from .models import (
     ActiveExplainChallenge,
     ActiveRateChallenge,
+    Annotation,
     Dataset,
     DatasetId,
     ExplainOutcome,
@@ -39,7 +41,7 @@ DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
     "wing outline": {"color": "#ffb000", "fill": "rgba(255, 176, 0, 0.2)"},
     "color": {"color": "#e83e8c", "fill": "rgba(232, 62, 140, 0.18)"},
 }
-DIFFERENCE_LABELS: tuple[DifferenceLabel, ...] = tuple(DIFFERENCE_LABEL_STYLES)
+DIFFERENCE_LABELS = tuple(DIFFERENCE_LABEL_STYLES)
 
 
 def _canvas_state_without_data(canvas_state: Any | None) -> dict[str, Any] | None:
@@ -54,19 +56,35 @@ def _canvas_state_without_data(canvas_state: Any | None) -> dict[str, Any] | Non
 
 def _build_annotation_payload(
     canvas_state: Any | None,
-) -> dict[str, Any] | None:
-    if not isinstance(canvas_state, dict):
+) -> Annotation | None:
+    try:
+        annotation = Annotation.model_validate(canvas_state)
+    except ValidationError:
         return None
 
-    if not isinstance((raw := canvas_state.get("raw")), dict) or not any(
-        isinstance(item, dict) for item in raw.get("objects", [])
-    ):
+    if not annotation.has_objects:
         return None
-    return _canvas_state_without_data(canvas_state)
+
+    return annotation
+
+
+def _annotation_raw_json(annotation: Annotation) -> dict[str, Any]:
+    return annotation.raw.model_dump(mode="json", exclude_none=True)
+
+
+def _canvas_initial_drawing(
+    stored_annotation: Annotation | None,
+) -> dict[str, Any] | None:
+    if stored_annotation is None:
+        return None
+    return _annotation_raw_json(stored_annotation)
 
 
 def _label_display(label: DifferenceLabel) -> str:
-    return label.title()
+    return (
+        f":color[{label.title()}]"
+        f'{{foreground="{DIFFERENCE_LABEL_STYLES[label]["color"]}"}}'
+    )
 
 
 def _invert_canvas_toolbar_icons() -> None:
@@ -75,7 +93,7 @@ def _invert_canvas_toolbar_icons() -> None:
                 <script>
                 (function() {
                     const STYLE_ID = 'diff-detect-toolbar-theme-style';
-                    const THEME_KEY = 'diff-detect-theme-mode';
+                    let lastThemeMode = null;
 
                     function parseRgb(value) {
                         const match = String(value || '').match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
@@ -99,6 +117,7 @@ def _invert_canvas_toolbar_icons() -> None:
 
                     function apply() {
                         const applyDarkFix = isDarkTheme();
+                        const themeMode = applyDarkFix ? 'dark' : 'light';
                         const frames = window.parent.document.querySelectorAll(
                             'iframe[title="streamlit_drawable_canvas.st_canvas"]'
                         );
@@ -136,25 +155,37 @@ def _invert_canvas_toolbar_icons() -> None:
                                 // Ignore cross-frame timing/access issues.
                             }
                         });
+
+                        lastThemeMode = themeMode;
                     }
 
-                    function syncThemeAndReloadIfNeeded() {
+                    function installThemeWatcher() {
                         try {
-                            const mode = isDarkTheme() ? 'dark' : 'light';
-                            const previousMode = window.parent.sessionStorage.getItem(THEME_KEY);
-                            if (previousMode && previousMode !== mode) {
-                                window.parent.sessionStorage.setItem(THEME_KEY, mode);
-                                window.parent.location.reload();
-                                return true;
-                            }
-                            window.parent.sessionStorage.setItem(THEME_KEY, mode);
+                            if (window.parent.__diffDetectThemeWatcherInstalled) return;
+                            window.parent.__diffDetectThemeWatcherInstalled = true;
+
+                            const root =
+                                window.parent.document.querySelector('.stApp') ||
+                                window.parent.document.body;
+
+                            const observer = new MutationObserver(() => {
+                                const mode = isDarkTheme() ? 'dark' : 'light';
+                                if (mode !== lastThemeMode) {
+                                    apply();
+                                }
+                            });
+
+                            observer.observe(root, {
+                                attributes: true,
+                                attributeFilter: ['class', 'style'],
+                                subtree: true,
+                            });
                         } catch (_) {
-                            // Ignore storage/access failures.
+                            // Ignore watcher setup failures.
                         }
-                        return false;
                     }
 
-                    if (syncThemeAndReloadIfNeeded()) return;
+                    installThemeWatcher();
                     apply();
                     setTimeout(apply, 250);
                 })();
@@ -167,11 +198,16 @@ def _invert_canvas_toolbar_icons() -> None:
     )
 
 
-@st.cache_data(max_entries=100, show_spinner=True)
-def _load_study_image(image: Image) -> PILImage.Image:
+@st.cache_data(max_entries=100)
+def _load_study_image_impl(image: Image) -> PILImage.Image:
     path = DATA_DIR / image.source
     assert path.exists(), f"Image file not found: {path}"
     rgba_image = PILImage.open(path).convert("RGBA")
+    return rgba_image
+
+
+def _load_study_image(image: Image) -> PILImage.Image:
+    rgba_image = _load_study_image_impl(image)
     theme_base = st.get_option("theme.base")
     if theme_base == "light":
         background = PILImage.new("RGBA", rgba_image.size, (245, 247, 250, 255))
@@ -518,44 +554,51 @@ class PageBuilder:
             ),
         ]
 
-        left, right = st.columns([2, 1])
-        with left:
-            subleft, subright = st.columns([1, 1], vertical_alignment="bottom")
-            with subleft:
-                st.subheader("Annotate visual biological differences")
-            with subright:
-                label = st.radio(
-                    "Active difference label",
-                    DIFFERENCE_LABELS,
-                    label_visibility="collapsed",
-                    format_func=_label_display,
-                    horizontal=True,
-                    key=f"explain_label_{active.challenge.id}_{state.task_idx}",
-                )
-        with right:
-            st.subheader("References")
-            self._render_reference_images(reference_specs)
-
         canvas_state = (
             f"explain_canvas_{active.challenge.id}_{state.task_idx}_"
             f"{explain_task.annotated_image}_state"
         )
-        stored_canvas_state = (
-            explain_task.annotations
+
+        left, right = st.columns([2, 1])
+        with left, st.container(width="content", horizontal=True):
+            # header_col, label_radio_col, reset_col = st.columns(
+            #     [0.5, 0.3, 0.2], vertical_alignment="bottom"
+            # )
+            # with header_col:
+            st.subheader("Annotate visual biological differences")
+            # with label_radio_col:
+            label_radio_key = f"explain_label_{active.challenge.id}_{state.task_idx}"
+            label = st.radio(
+                "Active difference label",
+                DIFFERENCE_LABELS,
+                label_visibility="collapsed",
+                format_func=_label_display,
+                horizontal=True,
+                key=label_radio_key,
+            )
+            # with reset_col:
+            if st.button(
+                "Reset labels",
+                icon=":material/delete:",
+                key=f"reset_labels_{active.challenge.id}_{state.task_idx}",
+                width="content",
+            ):
+                if isinstance(explain_task, ExplainOutcome):
+                    explain_task.annotation = None
+
+                st.session_state.pop(canvas_state, None)
+                st.rerun()
+
+        with right:
+            st.subheader("References")
+            self._render_reference_images(reference_specs)
+
+        stored_annotation = (
+            explain_task.annotation
             if isinstance(explain_task, ExplainOutcome)
             else None
         )
-        should_seed_initial_drawing = (
-            canvas_state not in st.session_state and stored_canvas_state is not None
-        )
-        if should_seed_initial_drawing:
-            st.session_state[canvas_state] = stored_canvas_state
-
-        initial_drawing = None
-        if isinstance(stored_canvas_state, dict) and should_seed_initial_drawing:
-            raw = stored_canvas_state.get("raw")
-            if isinstance(raw, dict):
-                initial_drawing = raw
+        initial_drawing = _canvas_initial_drawing(stored_annotation)
 
         with left:
             annotated_canvas_image = _load_study_image(annotated_image)
@@ -580,7 +623,6 @@ class PageBuilder:
                 (canvas_width, canvas_height), resample=PILImage.Resampling.LANCZOS
             )
             st_canvas(
-                fill_color=DIFFERENCE_LABEL_STYLES[label]["fill"],
                 stroke_width=8,
                 stroke_color=DIFFERENCE_LABEL_STYLES[label]["color"],
                 background_image=annotated_canvas_image,  # pyright: ignore[reportArgumentType]
@@ -620,7 +662,7 @@ class PageBuilder:
                 reference_image2=explain_task.reference_image2,
                 user=user.id,
                 explanation=cleaned_explanation or None,
-                annotations=annotation_payload,
+                annotation=annotation_payload,
             )
             self.storage.upsert_explain_outcome(outcome)
 
