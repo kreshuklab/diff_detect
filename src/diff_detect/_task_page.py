@@ -1,8 +1,11 @@
+import base64
+from io import BytesIO
 from typing import Any, Callable
 
 import streamlit as st
 from PIL import Image as PILImage
 from pydantic import ValidationError
+from st_clickable_images import clickable_images
 from streamlit_drawable_canvas import st_canvas
 
 from diff_detect._patch_canvas_toolbar import patch_canvas_toolbar
@@ -25,6 +28,13 @@ from .models import (
     RateOutcome,
     User,
 )
+
+
+def _image_data_url(image: PILImage.Image) -> str:
+    buffer = BytesIO()
+    image.save(buffer, format="JPEG", quality=85)
+    encoded_image = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/jpeg;base64,{encoded_image}"
 
 
 def render_task_page() -> PageKey | None:
@@ -113,7 +123,7 @@ def render_task_page() -> PageKey | None:
             if st.button("Next", width="stretch"):
                 save()
                 state.task_idx += 1
-                st.rerun()
+                return
         else:
             if st.button("Finish", width="stretch"):
                 save()
@@ -132,27 +142,67 @@ def _render_explain_task(
 ) -> Callable[[], None]:
     explain_task = active.challenge.tasks[state.task_idx]
 
-    annotated_image = get_image(
-        active.challenge_data.datasets,
-        explain_task.dataset_id,
-        explain_task.annotated_image,
+    candidate_image_ids = explain_task.image_ids
+    candidate_images = {
+        image_id: get_image(
+            active.challenge_data.datasets,
+            explain_task.dataset_id,
+            image_id,
+        )
+        for image_id in candidate_image_ids
+    }
+    candidate_key = "_".join(explain_task.candidate_key)
+    odd_image_key = (
+        f"explain_odd_image_{active.challenge.id}_{state.task_idx}_{candidate_key}"
     )
-    reference_images = [
-        get_image(
-            active.challenge_data.datasets,
-            explain_task.dataset_id,
-            explain_task.reference_image1,
-        ),
-        get_image(
-            active.challenge_data.datasets,
-            explain_task.dataset_id,
-            explain_task.reference_image2,
-        ),
-    ]
+    selected_odd_image = st.session_state.get(odd_image_key)
+    if selected_odd_image not in candidate_image_ids:
+        selected_odd_image = (
+            explain_task.annotated_image
+            if isinstance(explain_task, ExplainOutcome)
+            else None
+        )
+
+    st.header(CHALLENGE_NAMES[active.challenge.id])
+
+    if selected_odd_image is None:
+        st.subheader("Choose the unique specimen")
+        clicked_image_idx = clickable_images(
+            paths=[
+                _image_data_url(load_study_image(candidate_images[image_id]))
+                for image_id in candidate_image_ids
+            ],
+            titles=[f"Image {idx + 1}" for idx in range(len(candidate_image_ids))],
+            div_style={
+                "display": "flex",
+                "gap": "0.75rem",
+                "align-items": "flex-start",
+            },
+            img_style={
+                "width": "32%",
+                "height": "auto",
+                "object-fit": "contain",
+                "cursor": "pointer",
+                "border-radius": "4px",
+            },
+            key=f"{odd_image_key}_clickable",
+        )
+        if 0 <= clicked_image_idx < len(candidate_image_ids):
+            selected_odd_image = candidate_image_ids[clicked_image_idx]
+
+        if selected_odd_image is not None:
+            st.session_state[odd_image_key] = selected_odd_image
+            st.rerun()
+
+        return lambda: None
+
+    reference_image_ids = explain_task.references_for(selected_odd_image)
+    annotated_image = candidate_images[selected_odd_image]
+    reference_images = [candidate_images[image_id] for image_id in reference_image_ids]
 
     canvas_state_base = (
         f"explain_canvas_{active.challenge.id}_{state.task_idx}_"
-        f"{explain_task.annotated_image}_state"
+        f"{candidate_key}_{selected_odd_image}_state"
     )
     canvas_reset_key = f"{canvas_state_base}_reset_generation"
     canvas_generation = st.session_state.get(canvas_reset_key, 0)
@@ -162,15 +212,9 @@ def _render_explain_task(
         else f"{canvas_state_base}_{canvas_generation}"
     )
 
-    st.header(CHALLENGE_NAMES[active.challenge.id])
     left, right = st.columns([2, 1])
     with left, st.container(width="content", horizontal=True):
-        # header_col, label_radio_col, reset_col = st.columns(
-        #     [0.5, 0.3, 0.2], vertical_alignment="bottom"
-        # )
-        # with header_col:
         st.subheader("Annotate visual biological differences")
-        # with label_radio_col:
         label_radio_key = f"explain_label_{active.challenge.id}_{state.task_idx}"
 
         label = st.radio(
@@ -181,15 +225,20 @@ def _render_explain_task(
             horizontal=True,
             key=label_radio_key,
         )
-        # with reset_col:
         if st.button(
-            "Reset labels",
-            help="Clear drawn and restored labels",
+            "Reset",
+            help="Reset labels and image selection",
             icon=":material/delete:",
-            key=f"reset_labels_{active.challenge.id}_{state.task_idx}",
+            key=(
+                f"reset_labels_{active.challenge.id}_{state.task_idx}_"
+                f"{selected_odd_image}"
+            ),
             width="content",
         ):
-            if isinstance(explain_task, ExplainOutcome):
+            if (
+                isinstance(explain_task, ExplainOutcome)
+                and explain_task.annotated_image == selected_odd_image
+            ):
                 if explain_task.explanation:
                     explain_task = explain_task.model_copy(update={"annotation": None})
                     storage.upsert_explain_outcome(explain_task)
@@ -202,6 +251,7 @@ def _render_explain_task(
 
             st.session_state.pop(canvas_state, None)
             st.session_state[canvas_reset_key] = canvas_generation + 1
+            st.session_state.pop(odd_image_key, None)
             st.rerun()
 
     with right:
@@ -213,12 +263,15 @@ def _render_explain_task(
             st.image(load_study_image(ref_img), width="stretch")
 
     stored_annotation = (
-        explain_task.annotation if isinstance(explain_task, ExplainOutcome) else None
+        explain_task.annotation
+        if isinstance(explain_task, ExplainOutcome)
+        and explain_task.annotated_image == selected_odd_image
+        else None
     )
     initial_drawing = (
         None
         if stored_annotation is None
-        else stored_annotation.raw.model_dump(mode="json")
+        else stored_annotation.raw.model_dump(mode="json", exclude_unset=True)
     )
 
     with left:
@@ -261,12 +314,13 @@ def _render_explain_task(
 
     explanation_key = (
         f"explain_text_{active.challenge.id}_{state.task_idx}_"
-        f"{explain_task.annotated_image}"
+        f"{candidate_key}_{selected_odd_image}"
     )
     explanation = st.text_input(
         "Optional Explanation",
         value=explain_task.explanation or ""
         if isinstance(explain_task, ExplainOutcome)
+        and explain_task.annotated_image == selected_odd_image
         else "",
         width="stretch",
         placeholder="Describe the visible difference from the references.",
@@ -275,6 +329,7 @@ def _render_explain_task(
     )
 
     def save() -> None:
+        st.session_state[odd_image_key] = selected_odd_image
         annotation_payload = _build_annotation_payload(current_canvas_state)
         cleaned_explanation = explanation.strip()
         if annotation_payload is None and not cleaned_explanation:
@@ -282,9 +337,9 @@ def _render_explain_task(
 
         outcome = ExplainOutcome(
             dataset_id=explain_task.dataset_id,
-            annotated_image=explain_task.annotated_image,
-            reference_image1=explain_task.reference_image1,
-            reference_image2=explain_task.reference_image2,
+            annotated_image=selected_odd_image,
+            reference_image1=reference_image_ids[0],
+            reference_image2=reference_image_ids[1],
             user=user.id,
             explanation=cleaned_explanation or None,
             annotation=annotation_payload,

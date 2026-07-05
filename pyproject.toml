@@ -15,6 +15,7 @@ dependencies = [
     "pillow>=10.0",
     "pydantic>=2.0",
     "st-login-form>=0.3.0",
+    "st-clickable-images>=0.0.3",
     "st-supabase-connection>=2.1",
     "streamlit>=1.36",
     "sqlmodel",

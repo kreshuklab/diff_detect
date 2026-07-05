@@ -111,6 +111,70 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
     assert outcomes[0].explanation == "second"
 
 
+def test_explain_task_candidate_key_ignores_chosen_odd_image():
+    base_task = ExplainTask(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+    )
+    outcome = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/b",
+        reference_image1="butterfly/a",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="odd one changed",
+        annotation=None,
+    )
+
+    assert base_task.task_key != outcome.task_key
+    assert base_task.candidate_key == outcome.candidate_key
+    assert base_task.references_for("butterfly/b") == ("butterfly/a", "butterfly/c")
+
+
+def test_sqlite_storage_replaces_explain_outcome_when_odd_choice_changes(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(
+        User(
+            id="ada",
+            name="Ada",
+            lab="lab",
+            kind=UserKind.HUMAN,
+            role=UserRole.PARTICIPANT,
+            hashed_password="hash",
+        )
+    )
+    first = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="first odd choice",
+        annotation=None,
+    )
+    second = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/b",
+        reference_image1="butterfly/a",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="changed odd choice",
+        annotation=None,
+    )
+
+    storage.upsert_explain_outcome(first)
+    storage.upsert_explain_outcome(second)
+
+    outcomes = storage.fetch_explain_outcomes("ada")
+    assert len(outcomes) == 1
+    assert outcomes[0].annotated_image == "butterfly/b"
+    assert outcomes[0].explanation == "changed odd choice"
+
+
 def test_sqlite_storage_round_trips_annotation_model(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
     SQLModel.metadata.create_all(engine)

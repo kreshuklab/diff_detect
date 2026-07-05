@@ -2,7 +2,7 @@ import random
 from typing import assert_never
 
 import streamlit as st
-from sqlalchemy import Engine, delete
+from sqlalchemy import Engine
 from sqlmodel import Session, select
 
 from .._state import state
@@ -50,19 +50,28 @@ class SqliteStorage:
     def upsert_explain_outcome(self, outcome: ExplainOutcome) -> None:
         """Create or replace a user's explanation for one task."""
         with Session(self.engine) as session:
+            existing_outcomes = session.exec(
+                select(ExplainOutcome).where(ExplainOutcome.user == outcome.user)
+            )
+            for existing_outcome in existing_outcomes:
+                if (
+                    existing_outcome.candidate_key == outcome.candidate_key
+                    and existing_outcome.task_key != outcome.task_key
+                ):
+                    session.delete(existing_outcome)
+
             session.merge(outcome)
             session.commit()
 
     def delete_explain_outcome(self, outcome: ExplainOutcome) -> None:
         """Delete a user's explanation for one task."""
         with Session(self.engine) as session:
-            statement = delete(ExplainOutcome).where(
-                ExplainOutcome.annotated_image == outcome.annotated_image,
-                ExplainOutcome.reference_image1 == outcome.reference_image1,
-                ExplainOutcome.reference_image2 == outcome.reference_image2,
-                ExplainOutcome.user == outcome.user,
+            existing_outcomes = session.exec(
+                select(ExplainOutcome).where(ExplainOutcome.user == outcome.user)
             )
-            session.exec(statement)
+            for existing_outcome in existing_outcomes:
+                if existing_outcome.candidate_key == outcome.candidate_key:
+                    session.delete(existing_outcome)
             session.commit()
 
     def fetch_explain_outcomes(self, user_id: UserId):
@@ -120,14 +129,14 @@ class SqliteStorage:
 
         # replace explain tasks with outcomes if they exist
         own_explain_outcomes = {
-            out.task_key: out for out in self.fetch_explain_outcomes(user.id)
+            out.candidate_key: out for out in self.fetch_explain_outcomes(user.id)
         }
         for challenge in explain_challenges.values():
             for task_idx in range(len(challenge.tasks)):
                 task = challenge.tasks[task_idx]
                 assert isinstance(task, ExplainTask)
-                if task.task_key in own_explain_outcomes:
-                    outcome = own_explain_outcomes[task.task_key]
+                if task.candidate_key in own_explain_outcomes:
+                    outcome = own_explain_outcomes[task.candidate_key]
                     challenge.tasks[task_idx] = outcome
 
         rate_outcomes = {out.task_key: out for out in self.fetch_rate_outcomes(user.id)}

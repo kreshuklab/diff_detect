@@ -127,27 +127,13 @@ def get_explain_challenge(
     tasks: list[ExplainTask] = []
     for task_id in sorted(image_groups.keys()):
         group = image_groups[task_id]
-        tasks.extend(
-            [
-                ExplainTask(
-                    dataset_id=dataset_id,
-                    annotated_image=group[0].image_id,
-                    reference_image1=group[1].image_id,
-                    reference_image2=group[2].image_id,
-                ),
-                ExplainTask(
-                    dataset_id=dataset_id,
-                    annotated_image=group[1].image_id,
-                    reference_image1=group[2].image_id,
-                    reference_image2=group[0].image_id,
-                ),
-                ExplainTask(
-                    dataset_id=dataset_id,
-                    annotated_image=group[2].image_id,
-                    reference_image1=group[0].image_id,
-                    reference_image2=group[1].image_id,
-                ),
-            ]
+        tasks.append(
+            ExplainTask(
+                dataset_id=dataset_id,
+                annotated_image=group[0].image_id,
+                reference_image1=group[1].image_id,
+                reference_image2=group[2].image_id,
+            )
         )
 
     return {dataset_id: Dataset(images=images)}, ExplainChallenge(

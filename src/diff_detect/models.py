@@ -150,8 +150,24 @@ class ExplainTask(SQLModel):
         return values
 
     @property
-    def task_key(self) -> TaskKey:
+    def image_ids(self) -> TaskKey:
         return (self.annotated_image, self.reference_image1, self.reference_image2)
+
+    @property
+    def task_key(self) -> TaskKey:
+        return self.image_ids
+
+    @property
+    def candidate_key(self) -> TaskKey:
+        return cast(TaskKey, tuple(sorted(self.image_ids)))
+
+    def references_for(self, annotated_image: ImageId) -> tuple[ImageId, ImageId]:
+        references = tuple(
+            image_id for image_id in self.image_ids if image_id != annotated_image
+        )
+        if len(references) != 2:
+            raise ValueError("Annotated image must be one of the task images.")
+        return cast(tuple[ImageId, ImageId], references)
 
 
 class CanvasObject(BaseModel):
