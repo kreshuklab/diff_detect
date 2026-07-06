@@ -1,7 +1,9 @@
 from sqlmodel import SQLModel, create_engine
 
+from diff_detect.ai_annotations import import_ai_annotations, iter_ai_annotation_outcomes
 from diff_detect._storage._storage_sqlite import SqliteStorage
 from diff_detect._task_page import _build_annotation_payload
+from diff_detect.challenges import get_explain_challenge
 from diff_detect.models import (
     Annotation,
     DatasetId,
@@ -76,6 +78,18 @@ def test_build_annotation_payload_returns_none_without_objects():
     assert _build_annotation_payload({"data": "image", "raw": {"objects": []}}) is None
     assert _build_annotation_payload({"objects": [{"type": "path"}]}) is None
     assert _build_annotation_payload(None) is None
+
+
+def test_explain_challenge_loads_new_csv_format_without_ai_annotations():
+    datasets, challenge = get_explain_challenge("explain_butterfly_easy")
+
+    assert challenge.task_count == 10
+    assert len(datasets[DatasetId.BUTTERFLY].images) == 30
+    first_task = challenge.tasks[0]
+    assert isinstance(first_task, ExplainTask)
+    assert first_task.annotated_image.startswith("triple_")
+    first_image = datasets[DatasetId.BUTTERFLY].images[first_task.annotated_image]
+    assert first_image.source.startswith("butterfly/download/triple_")
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):
@@ -173,6 +187,33 @@ def test_sqlite_storage_replaces_explain_outcome_when_odd_choice_changes(tmp_pat
     assert len(outcomes) == 1
     assert outcomes[0].annotated_image == "butterfly/b"
     assert outcomes[0].explanation == "changed odd choice"
+
+
+def test_ai_annotation_parser_builds_bounding_box_outcomes():
+    outcomes = list(iter_ai_annotation_outcomes())
+
+    assert len(outcomes) == 20
+    first = outcomes[0]
+    assert first.user == "ai"
+    assert first.annotation is not None
+    first_object = first.annotation.raw.objects[0]
+    assert first_object.type == "rect"
+    assert first_object.stroke == "#e83e8c"
+    assert first_object.model_extra["ai_feature"]
+
+
+def test_import_ai_annotations_saves_ai_user_and_outcomes(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+
+    outcomes = import_ai_annotations(storage)
+
+    assert len(outcomes) == 20
+    ai_user = storage.fetch_user("ai")
+    assert ai_user is not None
+    assert ai_user.kind == UserKind.AI
+    assert len(storage.fetch_explain_outcomes("ai")) == 20
 
 
 def test_sqlite_storage_round_trips_annotation_model(tmp_path):

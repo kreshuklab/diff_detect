@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import csv
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 from PIL import Image as PILImage
@@ -19,6 +21,58 @@ from diff_detect.models import (
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT / "data"
+
+
+def _resolve_download_source(dataset_dir: Path, download_dir: Path, path: str) -> str:
+    candidate = download_dir / path
+    if not candidate.exists():
+        path_obj = Path(path)
+        candidate = download_dir / path_obj.parent.name / path_obj.name
+
+    assert candidate.exists(), f"Image file not found: {candidate}"
+    return candidate.relative_to(dataset_dir.parent).as_posix()
+
+
+def _image_from_index_row(
+    dataset_id: DatasetId, dataset_dir: Path, download_dir: Path, row: dict[str, Any]
+) -> tuple[str, Image]:
+    if "output_path" in row:
+        task_id = row["task_id"]
+        image_id = Path(row["output_path"]).stem
+        image = Image(
+            dataset_id=dataset_id,
+            image_id=ImageId(image_id),
+            source=_resolve_download_source(dataset_dir, download_dir, row["output_path"]),
+            image_info={
+                "mimic_group": row["mimic_group"],
+                "species": row["species"],
+                "subspecies": row["subspecies"],
+                "sex": row.get("Sex", ""),
+                "hybrid_stat": row.get("hybrid_stat", ""),
+                "file_url": row.get("wingseg_file_url", ""),
+                "camid": row.get("sam3_CAMID", ""),
+                "wingseg_dataset_index": row.get("wingseg_dataset_index", ""),
+            },
+            image_group=task_id,
+        )
+        return task_id, image
+
+    task_id = row["task_id"]
+    image = Image(
+        dataset_id=dataset_id,
+        image_id=ImageId(row["CAMID"]),
+        source=_resolve_download_source(dataset_dir, download_dir, row["path"]),
+        image_info={
+            "mimic_group": row["mimic_group"],
+            "species": row["species"],
+            "subspecies": row["subspecies"],
+            "sex": row["Sex"],
+            "hybrid_stat": row["hybrid_stat"],
+            "file_url": row["file_url"],
+        },
+        image_group=task_id,
+    )
+    return task_id, image
 
 
 def get_available_explain_challenges(
@@ -52,15 +106,10 @@ def get_explain_challenge(
     dataset_id = DatasetId.BUTTERFLY
     if challenge_id == "explain_dummy":
         index_path = Path("index_dummy.csv")
-        difficulty = 0.5
     elif challenge_id == "explain_butterfly_easy":
-        index_path = Path("index_easy.csv")
-        difficulty = 0.25
+        index_path = Path("easy.csv")
     elif challenge_id == "explain_butterfly_difficult":
-        index_path = Path(
-            "index_difficult.csv",
-        )
-        difficulty = 0.75
+        index_path = Path("difficult.csv")
     else:
         assert_never(challenge_id)
 
@@ -72,50 +121,18 @@ def get_explain_challenge(
     images: dict[ImageId, Image] = {}
     image_groups: dict[str, list[Image]] = {}
 
-    header = None
-    delimiter = ";"
-    with (download_dir / index_path).open(encoding="utf-8") as handle:
-        for line in handle:
-            if header is None:
-                header = line.strip().split(delimiter)
-                assert header == [
-                    "task_id",
-                    "mimic_group",
-                    "species",
-                    "subspecies",
-                    "path",
-                    "CAMID",
-                    "Sex",
-                    "file_url",
-                    "hybrid_stat",
-                ]
-                continue
+    if not (download_dir / index_path).exists() and not index_path.stem.startswith(
+        "index_"
+    ):
+        index_path = Path(f"index_{index_path.stem}.csv")
 
-            (
-                task_id,
-                mimic_group,
-                species,
-                subspecies,
-                path,
-                image_id,
-                sex,
-                file_url,
-                hybrid_stat,
-            ) = line.strip().split(delimiter)
-            print("loaded", image_id)
-            image = Image(
-                dataset_id=dataset_id,
-                image_id=ImageId(image_id),
-                source=(download_dir / path).relative_to(dataset_dir.parent).as_posix(),
-                image_info={
-                    "mimic_group": mimic_group,
-                    "species": species,
-                    "subspecies": subspecies,
-                    "sex": sex,
-                    "hybrid_stat": hybrid_stat,
-                    "file_url": file_url,
-                },
-                image_group=task_id,
+    with (download_dir / index_path).open(encoding="utf-8", newline="") as handle:
+        sample = handle.readline()
+        handle.seek(0)
+        delimiter = ";" if ";" in sample and "," not in sample else ","
+        for row in csv.DictReader(handle, delimiter=delimiter):
+            task_id, image = _image_from_index_row(
+                dataset_id, dataset_dir, download_dir, row
             )
             images[image.image_id] = image
             image_groups.setdefault(task_id, []).append(image)

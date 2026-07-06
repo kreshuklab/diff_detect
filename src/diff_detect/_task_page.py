@@ -13,6 +13,7 @@ from diff_detect.common import (
     CHALLENGE_NAMES,
     DIFFERENCE_LABEL_STYLES,
     DIFFERENCE_LABELS,
+    EXPLAIN_CANVAS_SCALE,
 )
 
 from ._page_utils import PageKey, format_label
@@ -278,7 +279,7 @@ def _render_explain_task(
         annotated_canvas_image = load_study_image(annotated_image)
 
         original_canvas_width, original_canvas_height = annotated_canvas_image.size
-        canvas_scale = 0.23  # laptop
+        canvas_scale = EXPLAIN_CANVAS_SCALE
         # canvas_scale = 0.42  # desktop
         canvas_width = round(original_canvas_width * canvas_scale)
         canvas_height = round(original_canvas_height * canvas_scale)

@@ -15,3 +15,4 @@ DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
     "color": {"color": "#e83e8c"},
 }
 DIFFERENCE_LABELS = tuple(DIFFERENCE_LABEL_STYLES)
+EXPLAIN_CANVAS_SCALE = 0.23
