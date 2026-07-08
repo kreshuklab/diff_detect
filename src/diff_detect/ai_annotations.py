@@ -42,8 +42,9 @@ def _read_image_id_by_path(download_dir: Path) -> dict[str, ImageId]:
     for index_path in [download_dir / "easy.csv", download_dir / "difficult.csv"]:
         with index_path.open(encoding="utf-8", newline="") as handle:
             for row in csv.DictReader(handle):
-                image_id = ImageId(Path(row["output_path"]).stem)
-                for key in _path_keys(row["output_path"]):
+                path = row["path"]
+                image_id = ImageId(Path(path).stem)
+                for key in _path_keys(path):
                     image_id_by_path[key] = image_id
     return image_id_by_path
 

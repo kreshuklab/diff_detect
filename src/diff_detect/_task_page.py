@@ -124,7 +124,7 @@ def render_task_page() -> PageKey | None:
             if st.button("Next", width="stretch"):
                 save()
                 state.task_idx += 1
-                return
+                st.rerun()
         else:
             if st.button("Finish", width="stretch"):
                 save()

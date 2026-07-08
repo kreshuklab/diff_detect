@@ -80,7 +80,7 @@ def test_build_annotation_payload_returns_none_without_objects():
     assert _build_annotation_payload(None) is None
 
 
-def test_explain_challenge_loads_new_csv_format_without_ai_annotations():
+def test_explain_challenge_loads_csv_without_ai_annotations():
     datasets, challenge = get_explain_challenge("explain_butterfly_easy")
 
     assert challenge.task_count == 10
@@ -90,6 +90,7 @@ def test_explain_challenge_loads_new_csv_format_without_ai_annotations():
     assert first_task.annotated_image.startswith("triple_")
     first_image = datasets[DatasetId.BUTTERFLY].images[first_task.annotated_image]
     assert first_image.source.startswith("butterfly/download/triple_")
+    assert first_image.image_info["camid"].startswith("CAM")
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):

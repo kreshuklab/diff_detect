@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Any
 
 import streamlit as st
 from PIL import Image as PILImage
@@ -34,34 +33,14 @@ def _resolve_download_source(dataset_dir: Path, download_dir: Path, path: str) -
 
 
 def _image_from_index_row(
-    dataset_id: DatasetId, dataset_dir: Path, download_dir: Path, row: dict[str, Any]
+    dataset_id: DatasetId, dataset_dir: Path, download_dir: Path, row: dict[str, str]
 ) -> tuple[str, Image]:
-    if "output_path" in row:
-        task_id = row["task_id"]
-        image_id = Path(row["output_path"]).stem
-        image = Image(
-            dataset_id=dataset_id,
-            image_id=ImageId(image_id),
-            source=_resolve_download_source(dataset_dir, download_dir, row["output_path"]),
-            image_info={
-                "mimic_group": row["mimic_group"],
-                "species": row["species"],
-                "subspecies": row["subspecies"],
-                "sex": row.get("Sex", ""),
-                "hybrid_stat": row.get("hybrid_stat", ""),
-                "file_url": row.get("wingseg_file_url", ""),
-                "camid": row.get("sam3_CAMID", ""),
-                "wingseg_dataset_index": row.get("wingseg_dataset_index", ""),
-            },
-            image_group=task_id,
-        )
-        return task_id, image
-
     task_id = row["task_id"]
+    path = row["path"]
     image = Image(
         dataset_id=dataset_id,
-        image_id=ImageId(row["CAMID"]),
-        source=_resolve_download_source(dataset_dir, download_dir, row["path"]),
+        image_id=ImageId(Path(path).stem),
+        source=_resolve_download_source(dataset_dir, download_dir, path),
         image_info={
             "mimic_group": row["mimic_group"],
             "species": row["species"],
@@ -69,6 +48,7 @@ def _image_from_index_row(
             "sex": row["Sex"],
             "hybrid_stat": row["hybrid_stat"],
             "file_url": row["file_url"],
+            "camid": row["CAMID"],
         },
         image_group=task_id,
     )
