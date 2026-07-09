@@ -326,7 +326,7 @@ def _explanations_legend() -> str:
     return (
         '<div style="display:flex;align-items:center;gap:1rem;'
         'flex-wrap:wrap;margin:0.5rem 0 0.75rem;">'
-        '<h3 style="margin:0;">Rate Explanations</h3>'
+        '<h3 style="margin:0;">Rate Judgements</h3>'
         f"{items}</div>"
     )
 
@@ -650,7 +650,7 @@ def _render_explain_task(
         state.active_challenge = active
         st.session_state.pop(canvas_state, None)
         st.session_state.pop(explanation_key, None)
-        state.toaster = "Explanation saved."
+        state.toaster = "Judgement saved."
 
     return save
 
@@ -745,7 +745,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
         )
 
         with col:
-            st.markdown(f"#### Explanation {labels_by_role[role]}")
+            st.markdown(f"#### Judgement {labels_by_role[role]}")
             st.pyplot(
                 _rate_annotation_figure(annotated_image, annotation_json),
                 clear_figure=False,
