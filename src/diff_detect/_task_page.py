@@ -1,10 +1,14 @@
 import base64
+import os
 import random
+from html import escape
 from io import BytesIO
 from typing import Any, Callable
 
+import numpy as np
 import streamlit as st
 from PIL import Image as PILImage
+from PIL import ImageDraw
 from pydantic import ValidationError
 from st_clickable_images import clickable_images
 from streamlit_drawable_canvas import st_canvas
@@ -74,6 +78,135 @@ def _annotation_figure(image: PILImage.Image, annotation: Annotation | None):
     from matplotlib.figure import Figure
     from matplotlib.patches import PathPatch, Rectangle
     from matplotlib.path import Path as MplPath
+    from skimage.measure import label, regionprops
+
+    def _draw_path_on_mask(
+        draw: ImageDraw.ImageDraw,
+        path_segments: list[Any],
+        pixel_width: int,
+    ) -> None:
+        current_point: tuple[float, float] | None = None
+        first_point: tuple[float, float] | None = None
+
+        for segment in path_segments:
+            if not segment:
+                continue
+
+            command = segment[0]
+            coords = [float(value) for value in segment[1:]]
+            next_point: tuple[float, float] | None = None
+
+            if command == "M" and len(coords) >= 2:
+                next_point = (coords[0], coords[1])
+                first_point = next_point
+            elif command == "L" and len(coords) >= 2:
+                next_point = (coords[0], coords[1])
+            elif command == "Q" and len(coords) >= 4:
+                next_point = (coords[2], coords[3])
+            elif command == "C" and len(coords) >= 6:
+                next_point = (coords[4], coords[5])
+            elif (
+                command == "Z" and current_point is not None and first_point is not None
+            ):
+                draw.line([current_point, first_point], fill=255, width=pixel_width)
+                current_point = first_point
+                continue
+
+            if next_point is None:
+                continue
+            if current_point is not None:
+                draw.line([current_point, next_point], fill=255, width=pixel_width)
+            current_point = next_point
+
+    def _connected_path_rectangles(
+        objects: list[dict[str, Any]],
+        canvas_width: int,
+        canvas_height: int,
+    ) -> list[tuple[float, float, float, float, str, float]]:
+        def _merge_close_boxes(
+            boxes: list[tuple[float, float, float, float]],
+            tolerance: float,
+        ) -> list[tuple[float, float, float, float]]:
+            if not boxes:
+                return []
+
+            remaining = [list(box) for box in boxes]
+            merged: list[tuple[float, float, float, float]] = []
+
+            while remaining:
+                left, top, right, bottom = remaining.pop()
+                changed = True
+                while changed:
+                    changed = False
+                    next_remaining: list[list[float]] = []
+                    for box_left, box_top, box_right, box_bottom in remaining:
+                        overlaps_x = not (
+                            box_left > right + tolerance or box_right < left - tolerance
+                        )
+                        overlaps_y = not (
+                            box_top > bottom + tolerance or box_bottom < top - tolerance
+                        )
+                        if overlaps_x and overlaps_y:
+                            left = min(left, box_left)
+                            top = min(top, box_top)
+                            right = max(right, box_right)
+                            bottom = max(bottom, box_bottom)
+                            changed = True
+                        else:
+                            next_remaining.append(
+                                [box_left, box_top, box_right, box_bottom]
+                            )
+                    remaining = next_remaining
+
+                merged.append((left, top, right, bottom))
+
+            return merged
+
+        masks_by_style: dict[tuple[str, float], PILImage.Image] = {}
+
+        for obj in objects:
+            if str(obj.get("type", "")).lower() != "path":
+                continue
+
+            path_segments = obj.get("path")
+            if not isinstance(path_segments, list) or len(path_segments) == 0:
+                continue
+
+            stroke = str(obj.get("stroke") or "#e83e8c")
+            line_width = max(1.5, min(float(obj.get("strokeWidth") or 3), 5))
+            style_key = (stroke, line_width)
+            if style_key not in masks_by_style:
+                masks_by_style[style_key] = PILImage.new(
+                    "L", (canvas_width, canvas_height), 0
+                )
+
+            draw = ImageDraw.Draw(masks_by_style[style_key])
+            _draw_path_on_mask(draw, path_segments, max(1, round(line_width)))
+
+        rectangles: list[tuple[float, float, float, float, str, float]] = []
+        for (stroke, line_width), mask in masks_by_style.items():
+            labeled = label((np.asarray(mask) > 0).astype(np.uint8), connectivity=2)
+            component_boxes: list[tuple[float, float, float, float]] = []
+            for region in regionprops(labeled):
+                min_row, min_col, max_row, max_col = region.bbox
+                left = float(min_col)
+                top = float(min_row)
+                right = float(max_col)
+                bottom = float(max_row)
+                if right <= left or bottom <= top:
+                    continue
+                component_boxes.append((left, top, right, bottom))
+
+            merged_boxes = _merge_close_boxes(
+                component_boxes,
+                tolerance=max(1.0, line_width / 2),
+            )
+            for left, top, right, bottom in merged_boxes:
+                rectangles.append(
+                    (left, top, right - left, bottom - top, stroke, line_width)
+                )
+
+        return rectangles
 
     width, height = image.size
     fig = Figure(figsize=(4, 4 * height / width), dpi=150)
@@ -86,7 +219,29 @@ def _annotation_figure(image: PILImage.Image, annotation: Annotation | None):
     if annotation is None:
         return fig
 
-    for obj in _scale_annotation(annotation, 1 / EXPLAIN_CANVAS_SCALE):
+    scaled_objects = _scale_annotation(annotation, 1 / EXPLAIN_CANVAS_SCALE)
+    convert_paths_to_rectangles = os.getenv("CONVERT_PATH_TO_RECT", "1") == "1"
+    if convert_paths_to_rectangles:
+        for (
+            left,
+            top,
+            rect_width,
+            rect_height,
+            stroke,
+            line_width,
+        ) in _connected_path_rectangles(scaled_objects, width, height):
+            ax.add_patch(
+                Rectangle(
+                    (left, top),
+                    rect_width,
+                    rect_height,
+                    fill=False,
+                    edgecolor=stroke,
+                    linewidth=line_width,
+                )
+            )
+
+    for obj in scaled_objects:
         stroke = obj.get("stroke") or "#e83e8c"
         line_width = max(1.5, min(float(obj.get("strokeWidth") or 3), 5))
         object_type = str(obj.get("type", "")).lower()
@@ -101,6 +256,8 @@ def _annotation_figure(image: PILImage.Image, annotation: Annotation | None):
                     linewidth=line_width,
                 )
             )
+        elif convert_paths_to_rectangles and object_type == "path":
+            continue
         elif object_type == "path" and isinstance(obj.get("path"), list):
             vertices = []
             codes = []
@@ -152,6 +309,25 @@ def _rate_annotation_figure(image: StudyImage, annotation_json: str | None):
         else Annotation.model_validate_json(annotation_json)
     )
     return _annotation_figure(load_study_image(image), annotation)
+
+
+def _explanations_legend() -> str:
+    items = "".join(
+        (
+            '<span style="display:inline-flex;align-items:center;gap:0.35rem;'
+            'font-size:0.9rem;white-space:nowrap;">'
+            f'<span style="width:0.75rem;height:0.75rem;border-radius:2px;'
+            f'display:inline-block;background:{DIFFERENCE_LABEL_STYLES[label]["color"]};"></span>'
+            f"{escape(label.title())}</span>"
+        )
+        for label in DIFFERENCE_LABELS
+    )
+    return (
+        '<div style="display:flex;align-items:center;gap:1rem;'
+        'flex-wrap:wrap;margin:0.5rem 0 0.75rem;">'
+        '<h3 style="margin:0;">Rate Explanations</h3>'
+        f"{items}</div>"
+    )
 
 
 def render_task_page() -> PageKey | None:
@@ -485,7 +661,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
     }
 
     st.header(CHALLENGE_NAMES[active.challenge.id])
-    st.subheader("Original image set")
+    # st.subheader("Original image set")
     for col, image_id in zip(st.columns(3), candidate_image_ids):
         with col:
             st.image(load_study_image(candidate_images[image_id]), width="stretch")
@@ -494,7 +670,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
     candidates = {}
     for role, user_id in users_by_role.items():
         outcome = active.challenge_data.reference_explain_outcomes.get(
-            (rate_task.candidate_key, user_id)
+            (rate_task.selection_key, user_id)
         )
         if outcome is None:
             st.error("Missing explanation candidates for this rating task.")
@@ -503,7 +679,8 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
 
     order_key = (
         f"rate_order_{active.challenge.id}_{state.task_idx}_"
-        f"{'_'.join(rate_task.candidate_key)}_{rate_task.own}_{rate_task.peer}_{rate_task.ai}"
+        f"{'_'.join(rate_task.task_key)}_{rate_task.selection_index}_"
+        f"{rate_task.own}_{rate_task.peer}_{rate_task.ai}"
     )
     order = st.session_state.get(order_key)
     if not isinstance(order, list) or sorted(order) != ["ai", "own", "peer"]:
@@ -546,7 +723,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
         if toast:
             state.toaster = "Rating saved."
 
-    st.subheader("Explanations")
+    st.markdown(_explanations_legend(), unsafe_allow_html=True)
     for col, role in zip(st.columns(3), order):
         candidate = candidates[role]
         annotated_image = get_image(
@@ -566,6 +743,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
                 _rate_annotation_figure(annotated_image, annotation_json),
                 clear_figure=False,
                 width="stretch",
+                pad_inches=0,
             )
             st.write(candidate.explanation or "")
 
@@ -583,6 +761,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
     existing_most_likely_ai = (
         rate_task.most_likely_ai if isinstance(rate_task, RateOutcome) else None
     )
+    st.divider()
     rating_container = st.container(
         width="stretch", horizontal=True, horizontal_alignment="center"
     )

@@ -24,6 +24,7 @@ dependencies = [
     "supabase>=2.0",
     "toml>=0.10",
     "passlib>=1.7.4",
+    "scikit-image>=0.22",
 ]
 
 [project.optional-dependencies]

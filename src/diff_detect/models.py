@@ -34,26 +34,35 @@ NonEmpty = Annotated[S, MinLen(1)]
 
 class DatasetId(StrEnum):
     BUTTERFLY = auto()
+    FLYBUTTER = auto()
 
 
 ImageId = str
 RateTaskId = str
 UserId = str
 ExplainChallengeId = Literal[
-    "explain_dummy", "explain_butterfly_easy", "explain_butterfly_difficult"
+    "explain_dummy",
+    "explain_butterfly_easy",
+    "explain_butterfly_difficult",
+    "explain_flybutter_easy",
 ]
 EXPLAIN_CHALLENGE_IDS: Sequence[ExplainChallengeId] = (
     "explain_dummy",
     "explain_butterfly_easy",
     "explain_butterfly_difficult",
+    "explain_flybutter_easy",
 )
 RateChallengeId = Literal[
-    "rate_dummy", "rate_butterfly_easy", "rate_butterfly_difficult"
+    "rate_dummy",
+    "rate_butterfly_easy",
+    "rate_butterfly_difficult",
+    "rate_flybutter_easy",
 ]
 RATE_CHALLENGE_IDS: Sequence[RateChallengeId] = (
     "rate_dummy",
     "rate_butterfly_easy",
     "rate_butterfly_difficult",
+    "rate_flybutter_easy",
 )
 ChallengeId = ExplainChallengeId | RateChallengeId
 
@@ -134,6 +143,7 @@ _UserId = Annotated[UserId, Field(foreign_key="user.id")]
 
 
 TaskKey = tuple[ImageId, ImageId, ImageId]
+SelectionKey = tuple[TaskKey, int]
 
 
 class ExplainTask(SQLModel):
@@ -160,6 +170,14 @@ class ExplainTask(SQLModel):
     @property
     def candidate_key(self) -> TaskKey:
         return cast(TaskKey, tuple(sorted(self.image_ids)))
+
+    @property
+    def selection_index(self) -> int:
+        return self.candidate_key.index(self.annotated_image)
+
+    @property
+    def selection_key(self) -> SelectionKey:
+        return self.candidate_key, self.selection_index
 
     def references_for(self, annotated_image: ImageId) -> tuple[ImageId, ImageId]:
         references = tuple(
@@ -308,7 +326,7 @@ class RateChallenge(_ChallengeBase[RateTask | RateOutcome]):
 @dataclass
 class ChallengeData:
     datasets: dict[DatasetId, Dataset]
-    reference_explain_outcomes: dict[tuple[TaskKey, UserId], ExplainOutcome]
+    reference_explain_outcomes: dict[tuple[SelectionKey, UserId], ExplainOutcome]
     challenges: dict[ChallengeId, ExplainChallenge | RateChallenge]
 
     @property

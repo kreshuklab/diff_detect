@@ -22,6 +22,10 @@ TRIPLE_ID_PATTERN = re.compile(r"triple_\d{4}")
 AI_USER_ID = "ai"
 
 
+def _ai_choice_user_id(user_id: str, subimage_label: str) -> str:
+    return f"{user_id}_{subimage_label}"
+
+
 def _triple_id(value: str) -> str:
     match = TRIPLE_ID_PATTERN.search(value)
     if match is None:
@@ -175,25 +179,26 @@ def iter_ai_annotation_outcomes(
         record = records_by_triple[triple_id]
         subimages = payload["subimages"]
         image_ids_by_subimage = _subimage_image_ids(subimages, image_id_by_path)
-        odd_label = _odd_subimage_label(subimages, record["unique_species_candidate"])
-        annotated_image = image_ids_by_subimage[odd_label]
-        reference_images = [
-            image_id
-            for label, image_id in image_ids_by_subimage.items()
-            if label != odd_label
-        ]
-        if len(reference_images) != 2:
-            raise ValueError(f"Expected two reference images for {triple_id}.")
+        _odd_subimage_label(subimages, record["unique_species_candidate"])
+        for selected_label in sorted(subimages):
+            annotated_image = image_ids_by_subimage[selected_label]
+            reference_images = [
+                image_ids_by_subimage[label]
+                for label in sorted(image_ids_by_subimage)
+                if label != selected_label
+            ]
+            if len(reference_images) != 2:
+                raise ValueError(f"Expected two reference images for {triple_id}.")
 
-        yield ExplainOutcome(
-            dataset_id=DatasetId.BUTTERFLY,
-            annotated_image=annotated_image,
-            reference_image1=reference_images[0],
-            reference_image2=reference_images[1],
-            user=user_id,
-            explanation=record.get("basis") or "AI bounding-box solution.",
-            annotation=_annotation_from_boxes(subimages[odd_label]["boxes"]),
-        )
+            yield ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image=annotated_image,
+                reference_image1=reference_images[0],
+                reference_image2=reference_images[1],
+                user=_ai_choice_user_id(user_id, selected_label),
+                explanation=record.get("basis") or "AI bounding-box solution.",
+                annotation=_annotation_from_boxes(subimages[selected_label]["boxes"]),
+            )
 
 
 def ensure_ai_user(storage: Any, *, user_id: str = AI_USER_ID) -> None:
@@ -214,8 +219,9 @@ def ensure_ai_user(storage: Any, *, user_id: str = AI_USER_ID) -> None:
 def import_ai_annotations(
     storage: Any, download_dir: Path | None = None, *, user_id: str = AI_USER_ID
 ) -> list[ExplainOutcome]:
-    ensure_ai_user(storage, user_id=user_id)
     outcomes = list(iter_ai_annotation_outcomes(download_dir, user_id=user_id))
+    for outcome_user_id in sorted({outcome.user for outcome in outcomes}):
+        ensure_ai_user(storage, user_id=outcome_user_id)
     for outcome in outcomes:
         storage.upsert_explain_outcome(outcome)
     return outcomes

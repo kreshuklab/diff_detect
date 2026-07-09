@@ -67,6 +67,11 @@ def render_login_page() -> PageKey | None:
             if not typed_user_name:
                 st.error("Please enter a username.")
                 return
+            if typed_user_name.lower() == "ai" or typed_user_name.lower().startswith(
+                "ai_"
+            ):
+                st.error("Username cannot be 'ai' or start with 'ai_'.")
+                return
             if "/" in typed_user_name:
                 st.error("Username cannot contain slashes.")
                 return

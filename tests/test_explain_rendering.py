@@ -1,3 +1,5 @@
+from collections import Counter
+
 from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine
 
@@ -302,6 +304,29 @@ def test_explain_task_candidate_key_ignores_chosen_odd_image():
     assert base_task.references_for("butterfly/b") == ("butterfly/a", "butterfly/c")
 
 
+def test_selection_key_ignores_reference_order():
+    first = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="first",
+        annotation=None,
+    )
+    second = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/c",
+        reference_image2="butterfly/b",
+        user="ada",
+        explanation="second",
+        annotation=None,
+    )
+
+    assert first.selection_key == second.selection_key
+
+
 def test_sqlite_storage_replaces_explain_outcome_when_odd_choice_changes(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
     SQLModel.metadata.create_all(engine)
@@ -344,7 +369,7 @@ def test_sqlite_storage_replaces_explain_outcome_when_odd_choice_changes(tmp_pat
     assert outcomes[0].explanation == "changed odd choice"
 
 
-def test_reference_explain_outcome_matches_candidate_key_when_odd_choice_differs(
+def test_reference_explain_outcome_matches_selection_key(
     tmp_path,
 ):
     engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
@@ -352,6 +377,7 @@ def test_reference_explain_outcome_matches_candidate_key_when_odd_choice_differs
     storage = SqliteStorage(engine=engine)
     storage.add_user(_user("ada"))
     storage.add_user(_user("grace"))
+    storage.add_user(_user("marie"))
     own = ExplainOutcome(
         dataset_id=DatasetId.BUTTERFLY,
         annotated_image="butterfly/a",
@@ -370,14 +396,24 @@ def test_reference_explain_outcome_matches_candidate_key_when_odd_choice_differs
         explanation="peer picked another odd image",
         annotation=None,
     )
+    matching_peer = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="marie",
+        explanation="peer picked the same odd image",
+        annotation=None,
+    )
 
     storage.upsert_explain_outcome(own)
     storage.upsert_explain_outcome(peer)
+    storage.upsert_explain_outcome(matching_peer)
 
     outcome = storage.fetch_random_reference_explain_outcome(own, UserKind.HUMAN)
     assert outcome is not None
-    assert outcome.user == "grace"
-    assert outcome.task_key != own.task_key
+    assert outcome.user == "marie"
+    assert outcome.task_key == own.task_key
     assert outcome.candidate_key == own.candidate_key
 
 
@@ -428,12 +464,77 @@ def test_fetch_challenges_ignores_stale_active_challenge_when_enabling_rate(tmp_
         state.active_challenge = None
 
 
+def test_fetch_challenges_keys_rate_outcomes_by_selection_key(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    user = User(
+        id="ada",
+        name="Ada",
+        lab="lab",
+        kind=UserKind.HUMAN,
+        role=UserRole.MAINTAINER,
+        hashed_password="hash",
+    )
+    storage.add_user(user)
+
+    _, challenge = get_explain_challenge("explain_butterfly_easy")
+    first_task = challenge.tasks[0]
+    changed_selection = first_task.reference_image1
+    changed_references = first_task.references_for(changed_selection)
+    changed_outcome = ExplainOutcome(
+        dataset_id=first_task.dataset_id,
+        annotated_image=changed_selection,
+        reference_image1=changed_references[0],
+        reference_image2=changed_references[1],
+        user=user.id,
+        explanation="changed selection",
+        annotation=None,
+    )
+
+    storage.upsert_explain_outcome(changed_outcome)
+    for task in challenge.tasks[1:]:
+        storage.upsert_explain_outcome(
+            ExplainOutcome(
+                dataset_id=task.dataset_id,
+                annotated_image=task.annotated_image,
+                reference_image1=task.reference_image1,
+                reference_image2=task.reference_image2,
+                user=user.id,
+                explanation="done",
+                annotation=None,
+            )
+        )
+    storage.upsert_rate_outcome(
+        RateOutcome(
+            dataset_id=first_task.dataset_id,
+            annotated_image=first_task.annotated_image,
+            reference_image1=first_task.reference_image1,
+            reference_image2=first_task.reference_image2,
+            own=user.id,
+            peer=user.id,
+            ai=user.id,
+            most_convincing=user.id,
+            most_likely_ai=user.id,
+        )
+    )
+
+    fresh = storage.fetch_challenges(user)
+    first_rate_task = fresh.rate_challenges["rate_butterfly_easy"].tasks[0]
+
+    assert not isinstance(first_rate_task, RateOutcome)
+    assert first_rate_task.selection_key == changed_outcome.selection_key
+
+
 def test_ai_annotation_parser_builds_bounding_box_outcomes():
     outcomes = list(iter_ai_annotation_outcomes())
 
-    assert len(outcomes) == 20
+    candidate_counts = Counter(outcome.candidate_key for outcome in outcomes)
+    assert len(outcomes) == 60
+    assert set(candidate_counts.values()) == {3}
+    assert {outcome.user for outcome in outcomes} == {"ai_a", "ai_b", "ai_c"}
     first = outcomes[0]
-    assert first.user == "ai"
+    assert first.user == "ai_a"
     assert first.annotation is not None
     first_object = first.annotation.raw.objects[0]
     assert first_object.type == "rect"
@@ -448,11 +549,12 @@ def test_import_ai_annotations_saves_ai_user_and_outcomes(tmp_path):
 
     outcomes = import_ai_annotations(storage)
 
-    assert len(outcomes) == 20
-    ai_user = storage.fetch_user("ai")
-    assert ai_user is not None
-    assert ai_user.kind == UserKind.AI
-    assert len(storage.fetch_explain_outcomes("ai")) == 20
+    assert len(outcomes) == 60
+    for user_id in ("ai_a", "ai_b", "ai_c"):
+        ai_user = storage.fetch_user(user_id)
+        assert ai_user is not None
+        assert ai_user.kind == UserKind.AI
+        assert len(storage.fetch_explain_outcomes(user_id)) == 20
 
 
 def test_sqlite_storage_round_trips_annotation_model(tmp_path):

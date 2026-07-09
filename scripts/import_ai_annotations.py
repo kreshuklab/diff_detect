@@ -25,7 +25,7 @@ def main() -> None:
     parser.add_argument(
         "--user-id",
         default=AI_USER_ID,
-        help="User id to use for imported AI annotations.",
+        help="Base user id prefix for imported AI annotations.",
     )
     parser.add_argument(
         "--dry-run",
@@ -44,7 +44,7 @@ def main() -> None:
         )
         print(
             f"Parsed {len(outcomes)} AI outcomes with {object_count} boxes "
-            f"for user {args.user_id!r}."
+            f"for user prefix {args.user_id!r}."
         )
         return
 
@@ -54,7 +54,7 @@ def main() -> None:
     outcomes = import_ai_annotations(
         storage, args.download_dir, user_id=args.user_id
     )
-    print(f"Imported {len(outcomes)} AI outcomes for user {args.user_id!r}.")
+    print(f"Imported {len(outcomes)} AI outcomes for user prefix {args.user_id!r}.")
 
 
 if __name__ == "__main__":

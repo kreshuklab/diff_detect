@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from pathlib import Path
 
 import streamlit as st
@@ -61,6 +62,7 @@ def get_available_explain_challenges(
     challenge_ids: list[ExplainChallengeId] = [
         "explain_butterfly_easy",
         "explain_butterfly_difficult",
+        "explain_flybutter_easy",
     ]
     # if user_role == UserRole.MAINTAINER:
     #     challenge_ids.insert(0, "explain_dummy")
@@ -90,6 +92,9 @@ def get_explain_challenge(
         index_path = Path("easy.csv")
     elif challenge_id == "explain_butterfly_difficult":
         index_path = Path("difficult.csv")
+    elif challenge_id == "explain_flybutter_easy":
+        dataset_id = DatasetId.FLYBUTTER
+        index_path = Path("easy.csv")
     else:
         assert_never(challenge_id)
 
@@ -122,7 +127,9 @@ def get_explain_challenge(
     )
 
     tasks: list[ExplainTask] = []
-    for task_id in sorted(image_groups.keys()):
+    for task_id in sorted(image_groups.keys())[
+        : os.getenv("MAX_TASKS_PER_CHALLENGE", 5)
+    ]:
         group = image_groups[task_id]
         tasks.append(
             ExplainTask(

@@ -16,7 +16,7 @@ def render_challenge_selection_page() -> PageKey | None:
     if user is None:
         return "login"
 
-    st.header("Choose a challenge")
+    st.header("Challenges")
     challenge_data = storage.fetch_challenges(user)
     if not challenge_data.explain_challenges:
         st.error("No challenges found.")
@@ -24,9 +24,9 @@ def render_challenge_selection_page() -> PageKey | None:
 
     explain_col, rate_col = st.columns(2)
     with explain_col:
-        st.subheader("Detect differences")
+        st.subheader("🔍 Find the Imposter")
     with rate_col:
-        st.subheader("Rate differences")
+        st.subheader("🕵 Detective Showdown")
 
     for (
         explain_challenge_id,
@@ -54,6 +54,8 @@ def render_challenge_selection_page() -> PageKey | None:
             rate_challenge_id = "rate_butterfly_easy"
         elif explain_challenge_id == "explain_butterfly_difficult":
             rate_challenge_id = "rate_butterfly_difficult"
+        elif explain_challenge_id == "explain_flybutter_easy":
+            rate_challenge_id = "rate_flybutter_easy"
         else:
             assert_never(explain_challenge_id)
 

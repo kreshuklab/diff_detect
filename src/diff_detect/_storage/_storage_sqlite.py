@@ -14,7 +14,7 @@ from ..models import (
     RateChallenge,
     RateOutcome,
     RateTask,
-    TaskKey,
+    SelectionKey,
     User,
     UserId,
     UserKind,
@@ -44,7 +44,9 @@ class SqliteStorage:
             ):
                 return
 
-            connection.execute(text("ALTER TABLE rateoutcome RENAME TO rateoutcome_old"))
+            connection.execute(
+                text("ALTER TABLE rateoutcome RENAME TO rateoutcome_old")
+            )
             RateOutcome.__table__.create(connection)
             column_names = [column.name for column in columns]
             copied_columns = ", ".join(column_names)
@@ -133,14 +135,14 @@ class SqliteStorage:
             session.commit()
 
     def fetch_reference_explain_outcome(
-        self, candidate_key: TaskKey, user_id: UserId
+        self, selection_key: SelectionKey, user_id: UserId
     ) -> ExplainOutcome | None:
         with Session(self.engine) as session:
             outcomes = session.exec(
                 select(ExplainOutcome).where(ExplainOutcome.user == user_id)
             )
             for outcome in outcomes:
-                if outcome.candidate_key == candidate_key:
+                if outcome.selection_key == selection_key:
                     return outcome
 
         return None
@@ -157,16 +159,13 @@ class SqliteStorage:
             if not other_users:
                 return None
 
-            statement = (
-                select(ExplainOutcome)
-                .where(
-                    ExplainOutcome.user.in_(other_users),
-                )
+            statement = select(ExplainOutcome).where(
+                ExplainOutcome.user.in_(other_users),
             )
             peer_ratings = [
                 outcome
                 for outcome in session.exec(statement)
-                if outcome.candidate_key == own_explain_outcome.candidate_key
+                if outcome.selection_key == own_explain_outcome.selection_key
             ]
             if not peer_ratings:
                 return None
@@ -191,13 +190,15 @@ class SqliteStorage:
                     challenge.tasks[task_idx] = outcome
 
         rate_outcomes = {
-            out.candidate_key: out for out in self.fetch_rate_outcomes(user.id)
+            out.selection_key: out for out in self.fetch_rate_outcomes(user.id)
         }
 
         challenges: dict[ChallengeId, ExplainChallenge | RateChallenge] = {
             k: v for k, v in explain_challenges.items()
         }
-        reference_explain_outcomes: dict[tuple[TaskKey, UserId], ExplainOutcome] = {}
+        reference_explain_outcomes: dict[
+            tuple[SelectionKey, UserId], ExplainOutcome
+        ] = {}
         for explain_id, explain_challenge in explain_challenges.items():
             if not explain_challenge.finished:
                 continue
@@ -208,6 +209,8 @@ class SqliteStorage:
                 rate_id = "rate_butterfly_easy"
             elif explain_id == "explain_butterfly_difficult":
                 rate_id = "rate_butterfly_difficult"
+            elif explain_id == "explain_flybutter_easy":
+                rate_id = "rate_flybutter_easy"
             else:
                 assert_never(explain_id)
 
@@ -215,25 +218,28 @@ class SqliteStorage:
             for explain_outcome in explain_challenge.tasks:
                 assert isinstance(explain_outcome, ExplainOutcome)
                 reference_explain_outcomes[
-                    (explain_outcome.candidate_key, explain_outcome.user)
+                    (explain_outcome.selection_key, explain_outcome.user)
                 ] = explain_outcome
 
-                rate_outcome = rate_outcomes.get(explain_outcome.candidate_key)
+                rate_outcome = rate_outcomes.get(explain_outcome.selection_key)
                 if rate_outcome is not None:
+                    reference_outcomes = []
                     for reference_user in (rate_outcome.peer, rate_outcome.ai):
                         reference_outcome = self.fetch_reference_explain_outcome(
-                            explain_outcome.candidate_key, reference_user
+                            rate_outcome.selection_key, reference_user
                         )
                         if reference_outcome is not None:
+                            reference_outcomes.append(reference_outcome)
                             reference_explain_outcomes[
                                 (
-                                    reference_outcome.candidate_key,
+                                    reference_outcome.selection_key,
                                     reference_outcome.user,
                                 )
                             ] = reference_outcome
 
-                    tasks.append(rate_outcome)
-                    continue
+                    if len(reference_outcomes) == 2:
+                        tasks.append(rate_outcome)
+                        continue
 
                 peer_explain_outcome = self.fetch_random_reference_explain_outcome(
                     explain_outcome, UserKind.HUMAN
@@ -258,11 +264,11 @@ class SqliteStorage:
                         continue
 
                 reference_explain_outcomes[
-                    (peer_explain_outcome.candidate_key, peer_explain_outcome.user)
+                    (peer_explain_outcome.selection_key, peer_explain_outcome.user)
                 ] = peer_explain_outcome
 
                 reference_explain_outcomes[
-                    (ai_explain_outcome.candidate_key, ai_explain_outcome.user)
+                    (ai_explain_outcome.selection_key, ai_explain_outcome.user)
                 ] = ai_explain_outcome
 
                 tasks.append(

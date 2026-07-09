@@ -38,7 +38,7 @@ PAGES: dict[PageKey, StreamlitPage] = {
     ),
     "challenge": st.Page(
         wrap_page_rendering(render_challenge_selection_page),
-        title="Select challenge",
+        title="Challenges",
         icon=":material/list_alt:",
         url_path="challenge",
         default=state.user is not None,
