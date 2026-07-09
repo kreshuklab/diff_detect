@@ -12,6 +12,7 @@ from diff_detect.ai_annotations import (
     iter_ai_annotation_outcomes,
 )
 from diff_detect.challenges import get_explain_challenge
+from diff_detect.common import EXPLAIN_STROKE_WIDTH
 from diff_detect.models import (
     ActiveExplainChallenge,
     Annotation,
@@ -616,15 +617,19 @@ def test_ai_annotation_parser_builds_bounding_box_outcomes():
     outcomes = list(iter_ai_annotation_outcomes())
 
     candidate_counts = Counter(outcome.candidate_key for outcome in outcomes)
-    assert len(outcomes) == 60
+    assert len(outcomes) == 75
     assert set(candidate_counts.values()) == {3}
     assert {outcome.user for outcome in outcomes} == {"ai_a", "ai_b", "ai_c"}
+    assert {DatasetId.FLYBUTTER, DatasetId.BUTTERFLY} == {
+        outcome.dataset_id for outcome in outcomes
+    }
     first = outcomes[0]
     assert first.user == "ai_a"
     assert first.annotation is not None
     first_object = first.annotation.raw.objects[0]
     assert first_object.type == "rect"
     assert first_object.stroke == "#e83e8c"
+    assert first_object.model_extra["strokeWidth"] == EXPLAIN_STROKE_WIDTH
     assert first_object.model_extra["ai_feature"]
 
 
@@ -635,12 +640,12 @@ def test_import_ai_annotations_saves_ai_user_and_outcomes(tmp_path):
 
     outcomes = import_ai_annotations(storage)
 
-    assert len(outcomes) == 60
+    assert len(outcomes) == 75
     for user_id in ("ai_a", "ai_b", "ai_c"):
         ai_user = storage.fetch_user(user_id)
         assert ai_user is not None
         assert ai_user.kind == UserKind.AI
-        assert len(storage.fetch_explain_outcomes(user_id)) == 20
+        assert len(storage.fetch_explain_outcomes(user_id)) == 25
 
 
 def test_sqlite_storage_round_trips_annotation_model(tmp_path):

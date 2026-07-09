@@ -20,6 +20,7 @@ from diff_detect.common import (
     DIFFERENCE_LABEL_STYLES,
     DIFFERENCE_LABELS,
     EXPLAIN_CANVAS_SCALE,
+    EXPLAIN_STROKE_WIDTH,
 )
 
 from ._page_utils import PageKey, format_label
@@ -598,7 +599,7 @@ def _render_explain_task(
             (canvas_width, canvas_height), resample=PILImage.Resampling.LANCZOS
         )
         st_canvas(
-            stroke_width=8,
+            stroke_width=EXPLAIN_STROKE_WIDTH,
             stroke_color=DIFFERENCE_LABEL_STYLES[label]["color"],
             background_image=annotated_canvas_image,  # pyright: ignore[reportArgumentType]
             update_streamlit=True,
@@ -752,7 +753,7 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
                 width="stretch",
                 pad_inches=0,
             )
-            st.write(candidate.explanation or "")
+            # st.write(candidate.explanation or "")
 
     def selected_index(choice: str | None) -> int | None:
         if choice is None:

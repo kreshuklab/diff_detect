@@ -8,8 +8,6 @@ from diff_detect.ai_annotations import (
     import_ai_annotations,
     iter_ai_annotation_outcomes,
 )
-from diff_detect.challenges import DATA_DIR
-from diff_detect.models import DatasetId
 
 
 def main() -> None:
@@ -19,8 +17,10 @@ def main() -> None:
     parser.add_argument(
         "--download-dir",
         type=Path,
-        default=DATA_DIR / DatasetId.BUTTERFLY / "download",
-        help="Directory containing easy.csv, difficult.csv, and AI annotation JSON.",
+        default=None,
+        help=(
+            "Optional single download directory. Defaults to Butterfly and FlyButter."
+        ),
     )
     parser.add_argument(
         "--user-id",
