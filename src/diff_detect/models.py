@@ -237,14 +237,19 @@ class RateTask(ExplainTask):
 class RateOutcome(RateTask, table=True):
     timestamp: datetime.datetime = Field(default_factory=datetime.datetime.now)
 
-    most_convincing: _UserId
-    most_likely_ai: _UserId
+    most_convincing: _UserId | None = None
+    most_likely_ai: _UserId | None = None
+
+    @property
+    def complete(self) -> bool:
+        return self.most_convincing is not None and self.most_likely_ai is not None
 
     @model_validator(mode="after")
     def _valid_choices(self) -> Self:
-        if self.most_convincing not in {self.own, self.peer, self.ai}:
+        choices = {self.own, self.peer, self.ai}
+        if self.most_convincing is not None and self.most_convincing not in choices:
             raise ValueError("Most convincing user must be one of the three users.")
-        if self.most_likely_ai not in {self.own, self.peer, self.ai}:
+        if self.most_likely_ai is not None and self.most_likely_ai not in choices:
             raise ValueError("Most likely AI user must be one of the three users.")
         return self
 
@@ -256,28 +261,35 @@ TaskT = TypeVar("TaskT", bound=ExplainTask | RateTask)
 class _ChallengeBase(Generic[TaskT]):
     tasks: NonEmpty[list[TaskT]]
 
+    @staticmethod
+    def _task_done(task: TaskT) -> bool:
+        return isinstance(task, ExplainOutcome) or (
+            isinstance(task, RateOutcome) and task.complete
+        )
+
     @property
     def task_count(self) -> int:
         return len(self.tasks)
 
     @property
     def done_count(self) -> int:
-        return len(
-            [t for t in self.tasks if isinstance(t, (ExplainOutcome, RateOutcome))]
-        )
+        return len([task for task in self.tasks if self._task_done(task)])
 
     @property
     def finished(self) -> bool:
-        return all(isinstance(t, (ExplainOutcome, RateOutcome)) for t in self.tasks)
+        return all(self._task_done(task) for task in self.tasks)
 
     @property
     def progress(self) -> float:
-        return self.done_count / self.task_count
+        if self.task_count < 1:
+            return 0.0
+        else:
+            return self.done_count / self.task_count
 
     @property
     def first_undone(self) -> int | None:
         for idx, task in enumerate(self.tasks):
-            if not isinstance(task, (ExplainOutcome, RateOutcome)):
+            if not self._task_done(task):
                 return idx
 
         return None

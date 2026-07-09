@@ -1,11 +1,19 @@
+from sqlalchemy import text
 from sqlmodel import SQLModel, create_engine
 
-from diff_detect.ai_annotations import import_ai_annotations, iter_ai_annotation_outcomes
+from diff_detect._leaderboard_page import _score_explain, _score_rate
+from diff_detect._state import state
 from diff_detect._storage._storage_sqlite import SqliteStorage
-from diff_detect._task_page import _build_annotation_payload
+from diff_detect._task_page import _build_annotation_payload, _scale_annotation
+from diff_detect.ai_annotations import (
+    import_ai_annotations,
+    iter_ai_annotation_outcomes,
+)
 from diff_detect.challenges import get_explain_challenge
 from diff_detect.models import (
+    ActiveExplainChallenge,
     Annotation,
+    ChallengeData,
     DatasetId,
     ExplainChallenge,
     ExplainOutcome,
@@ -17,6 +25,17 @@ from diff_detect.models import (
     UserKind,
     UserRole,
 )
+
+
+def _user(user_id: str, *, kind: UserKind = UserKind.HUMAN) -> User:
+    return User(
+        id=user_id,
+        name=user_id.title(),
+        lab="lab",
+        kind=kind,
+        role=UserRole.PARTICIPANT,
+        hashed_password="hash",
+    )
 
 
 def test_build_annotation_payload_strips_canvas_image_data():
@@ -80,6 +99,39 @@ def test_build_annotation_payload_returns_none_without_objects():
     assert _build_annotation_payload(None) is None
 
 
+def test_scale_annotation_scales_geometry_only():
+    annotation = Annotation.model_validate(
+        {
+            "raw": {
+                "version": "4.4.0",
+                "objects": [
+                    {
+                        "type": "rect",
+                        "left": 1,
+                        "top": 2,
+                        "width": 3,
+                        "height": 4,
+                        "strokeWidth": 8,
+                    },
+                    {
+                        "type": "path",
+                        "path": [["M", 1, 2], ["Q", 3, 4, 5, 6]],
+                    },
+                ],
+            }
+        }
+    )
+
+    rect, path = _scale_annotation(annotation, 10)
+
+    assert rect["left"] == 10
+    assert rect["top"] == 20
+    assert rect["width"] == 30
+    assert rect["height"] == 40
+    assert rect["strokeWidth"] == 8
+    assert path["path"] == [["M", 10, 20], ["Q", 30, 40, 50, 60]]
+
+
 def test_explain_challenge_loads_csv_without_ai_annotations():
     datasets, challenge = get_explain_challenge("explain_butterfly_easy")
 
@@ -124,6 +176,108 @@ def test_sqlite_storage_upserts_explain_outcome(tmp_path):
     outcomes = storage.fetch_explain_outcomes("ada")
     assert len(outcomes) == 1
     assert outcomes[0].explanation == "second"
+
+
+def test_sqlite_storage_upserts_rate_outcome(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    for user in (_user("ada"), _user("grace"), _user("bot", kind=UserKind.AI)):
+        storage.add_user(user)
+
+    first = RateOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        own="ada",
+        peer="grace",
+        ai="bot",
+        most_convincing="ada",
+        most_likely_ai="bot",
+    )
+    second = first.model_copy(update={"most_convincing": "grace"})
+
+    storage.upsert_rate_outcome(first)
+    storage.upsert_rate_outcome(second)
+
+    outcomes = storage.fetch_rate_outcomes("ada")
+    assert len(outcomes) == 1
+    assert outcomes[0].most_convincing == "grace"
+    assert outcomes[0].most_likely_ai == "bot"
+
+
+def test_sqlite_storage_saves_partial_rate_outcome(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    for user in (_user("ada"), _user("grace"), _user("bot", kind=UserKind.AI)):
+        storage.add_user(user)
+
+    storage.upsert_rate_outcome(
+        RateOutcome(
+            dataset_id=DatasetId.BUTTERFLY,
+            annotated_image="butterfly/a",
+            reference_image1="butterfly/b",
+            reference_image2="butterfly/c",
+            own="ada",
+            peer="grace",
+            ai="bot",
+            most_convincing="grace",
+            most_likely_ai=None,
+        )
+    )
+
+    outcome = storage.fetch_rate_outcomes("ada")[0]
+    assert outcome.most_convincing == "grace"
+    assert outcome.most_likely_ai is None
+    assert not outcome.complete
+
+
+def test_sqlite_storage_migrates_rate_choices_to_nullable(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE rateoutcome (
+                    dataset_id VARCHAR(9) NOT NULL,
+                    annotated_image VARCHAR NOT NULL,
+                    reference_image1 VARCHAR NOT NULL,
+                    reference_image2 VARCHAR NOT NULL,
+                    own VARCHAR NOT NULL,
+                    peer VARCHAR NOT NULL,
+                    ai VARCHAR NOT NULL,
+                    timestamp DATETIME NOT NULL,
+                    most_convincing VARCHAR NOT NULL,
+                    most_likely_ai VARCHAR NOT NULL,
+                    PRIMARY KEY (
+                        annotated_image, reference_image1, reference_image2,
+                        own, peer, ai
+                    )
+                )
+                """
+            )
+        )
+
+    storage = SqliteStorage(engine=engine)
+    storage.upsert_rate_outcome(
+        RateOutcome(
+            dataset_id=DatasetId.BUTTERFLY,
+            annotated_image="butterfly/a",
+            reference_image1="butterfly/b",
+            reference_image2="butterfly/c",
+            own="ada",
+            peer="grace",
+            ai="bot",
+            most_convincing=None,
+            most_likely_ai="bot",
+        )
+    )
+
+    outcome = storage.fetch_rate_outcomes("ada")[0]
+    assert outcome.most_convincing is None
+    assert outcome.most_likely_ai == "bot"
 
 
 def test_explain_task_candidate_key_ignores_chosen_odd_image():
@@ -188,6 +342,90 @@ def test_sqlite_storage_replaces_explain_outcome_when_odd_choice_changes(tmp_pat
     assert len(outcomes) == 1
     assert outcomes[0].annotated_image == "butterfly/b"
     assert outcomes[0].explanation == "changed odd choice"
+
+
+def test_reference_explain_outcome_matches_candidate_key_when_odd_choice_differs(
+    tmp_path,
+):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(_user("ada"))
+    storage.add_user(_user("grace"))
+    own = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="own",
+        annotation=None,
+    )
+    peer = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/b",
+        reference_image1="butterfly/a",
+        reference_image2="butterfly/c",
+        user="grace",
+        explanation="peer picked another odd image",
+        annotation=None,
+    )
+
+    storage.upsert_explain_outcome(own)
+    storage.upsert_explain_outcome(peer)
+
+    outcome = storage.fetch_random_reference_explain_outcome(own, UserKind.HUMAN)
+    assert outcome is not None
+    assert outcome.user == "grace"
+    assert outcome.task_key != own.task_key
+    assert outcome.candidate_key == own.candidate_key
+
+
+def test_fetch_challenges_ignores_stale_active_challenge_when_enabling_rate(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    user = User(
+        id="ada",
+        name="Ada",
+        lab="lab",
+        kind=UserKind.HUMAN,
+        role=UserRole.MAINTAINER,
+        hashed_password="hash",
+    )
+    storage.add_user(user)
+
+    datasets, stale_challenge = get_explain_challenge("explain_butterfly_easy")
+    state.active_challenge = ActiveExplainChallenge(
+        challenge_data=ChallengeData(
+            datasets=datasets,
+            reference_explain_outcomes={},
+            challenges={stale_challenge.id: stale_challenge},
+        ),
+        challenge_id=stale_challenge.id,
+    )
+    try:
+        for task in stale_challenge.tasks:
+            storage.upsert_explain_outcome(
+                ExplainOutcome(
+                    dataset_id=task.dataset_id,
+                    annotated_image=task.annotated_image,
+                    reference_image1=task.reference_image1,
+                    reference_image2=task.reference_image2,
+                    user=user.id,
+                    explanation="done",
+                    annotation=None,
+                )
+            )
+
+        fresh = storage.fetch_challenges(user)
+
+        assert fresh.explain_challenges["explain_butterfly_easy"].finished
+        assert fresh.rate_challenges["rate_butterfly_easy"].task_count == len(
+            stale_challenge.tasks
+        )
+    finally:
+        state.active_challenge = None
 
 
 def test_ai_annotation_parser_builds_bounding_box_outcomes():
@@ -340,3 +578,137 @@ def test_challenge_progress_counts_matching_outcome_type():
     assert explain_challenge.first_undone == 1
     assert rate_challenge.done_count == 1
     assert rate_challenge.first_undone == 1
+
+
+def test_partial_rate_outcome_does_not_count_as_done():
+    challenge = RateChallenge(
+        id="rate_dummy",
+        tasks=[
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                own="ada",
+                peer="grace",
+                ai="bot",
+                most_convincing="ada",
+                most_likely_ai=None,
+            ),
+        ],
+    )
+
+    assert challenge.done_count == 0
+    assert not challenge.finished
+    assert challenge.first_undone == 0
+
+
+def test_leaderboard_scores_explain_and_rate_by_user_and_lab():
+    users = {
+        "ada": _user("ada"),
+        "grace": _user("grace"),
+        "bot": _user("bot", kind=UserKind.AI),
+    }
+    challenge = ExplainChallenge(
+        id="explain_dummy",
+        tasks=[
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+            ),
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+            ),
+        ],
+    )
+    explain_user_rows, explain_lab_rows = _score_explain(
+        challenge,
+        [
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                user="ada",
+                explanation="correct",
+                annotation=None,
+            ),
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/f",
+                reference_image1="butterfly/d",
+                reference_image2="butterfly/e",
+                user="grace",
+                explanation="wrong",
+                annotation=None,
+            ),
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                user="bot",
+                explanation="not a participant",
+                annotation=None,
+            ),
+        ],
+        users,
+    )
+    rate_user_rows, rate_lab_rows = _score_rate(
+        challenge,
+        [
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                own="ada",
+                peer="grace",
+                ai="bot",
+                most_convincing="ada",
+                most_likely_ai="bot",
+            ),
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+                own="grace",
+                peer="ada",
+                ai="bot",
+                most_convincing="ada",
+                most_likely_ai="ada",
+            ),
+        ],
+        users,
+    )
+
+    assert explain_user_rows == [
+        {
+            "User": "Ada (ada)",
+            "Score x/1": 1,
+        },
+        {
+            "User": "Grace (grace)",
+            "Score x/1": 0,
+        },
+    ]
+    assert explain_lab_rows == [
+        {
+            "Lab": "lab",
+            "Score x/2": 1,
+        }
+    ]
+    assert rate_user_rows[0]["User"] == "Ada (ada)"
+    assert rate_user_rows[0]["Score x/1"] == 1
+    assert rate_lab_rows == [
+        {
+            "Lab": "lab",
+            "Score x/2": 1,
+        }
+    ]

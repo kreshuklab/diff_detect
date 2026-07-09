@@ -17,7 +17,7 @@ dependencies = [
     "st-login-form>=0.3.0",
     "st-clickable-images>=0.0.3",
     "st-supabase-connection>=2.1",
-    "streamlit>=1.36",
+    "streamlit[charts]>=1.36",
     "sqlmodel",
     "streamlit-drawable-canvas-fix>=0.9.3",
     # "streamlit-labelstudio<0.1.0",

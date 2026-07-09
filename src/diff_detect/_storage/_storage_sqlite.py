@@ -1,11 +1,9 @@
 import random
 from typing import assert_never
 
-import streamlit as st
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
 from sqlmodel import Session, select
 
-from .._state import state
 from ..challenges import get_available_explain_challenges
 from ..models import (
     ChallengeData,
@@ -30,6 +28,33 @@ class SqliteStorage:
 
     def __init__(self, *, engine: Engine | None = None):
         self.engine = engine if engine is not None else get_sqlite_engine()
+        self._allow_partial_rate_outcomes()
+
+    def _allow_partial_rate_outcomes(self) -> None:
+        if self.engine.dialect.name != "sqlite":
+            return
+
+        with self.engine.begin() as connection:
+            columns = list(connection.execute(text("PRAGMA table_info(rateoutcome)")))
+            if not columns:
+                return
+            if not any(
+                column.name in {"most_convincing", "most_likely_ai"} and column.notnull
+                for column in columns
+            ):
+                return
+
+            connection.execute(text("ALTER TABLE rateoutcome RENAME TO rateoutcome_old"))
+            RateOutcome.__table__.create(connection)
+            column_names = [column.name for column in columns]
+            copied_columns = ", ".join(column_names)
+            connection.execute(
+                text(
+                    f"INSERT INTO rateoutcome ({copied_columns}) "
+                    f"SELECT {copied_columns} FROM rateoutcome_old"
+                )
+            )
+            connection.execute(text("DROP TABLE rateoutcome_old"))
 
     def fetch_user(self, user_id: UserId) -> User | None:
         with Session(self.engine) as session:
@@ -41,6 +66,10 @@ class SqliteStorage:
             statement = select(User.lab).distinct()
             labs = session.exec(statement)
             return [lab for lab in labs if lab is not None]
+
+    def fetch_users(self) -> list[User]:
+        with Session(self.engine) as session:
+            return list(session.exec(select(User)))
 
     def add_user(self, user: User) -> None:
         with Session(self.engine, expire_on_commit=False) as session:
@@ -82,6 +111,10 @@ class SqliteStorage:
 
             return list(explanations)
 
+    def fetch_all_explain_outcomes(self) -> list[ExplainOutcome]:
+        with Session(self.engine) as session:
+            return list(session.exec(select(ExplainOutcome)))
+
     def fetch_rate_outcomes(self, user_id: UserId):
         """Fetch all ratings submitted by a given user."""
         with Session(self.engine) as session:
@@ -89,7 +122,29 @@ class SqliteStorage:
             ratings = session.exec(statement)
             return list(ratings)
 
-    @st.cache_data(scope="session")
+    def fetch_all_rate_outcomes(self) -> list[RateOutcome]:
+        with Session(self.engine) as session:
+            return list(session.exec(select(RateOutcome)))
+
+    def upsert_rate_outcome(self, outcome: RateOutcome) -> None:
+        """Create or replace a user's rating for one task."""
+        with Session(self.engine) as session:
+            session.merge(outcome)
+            session.commit()
+
+    def fetch_reference_explain_outcome(
+        self, candidate_key: TaskKey, user_id: UserId
+    ) -> ExplainOutcome | None:
+        with Session(self.engine) as session:
+            outcomes = session.exec(
+                select(ExplainOutcome).where(ExplainOutcome.user == user_id)
+            )
+            for outcome in outcomes:
+                if outcome.candidate_key == candidate_key:
+                    return outcome
+
+        return None
+
     def fetch_random_reference_explain_outcome(
         self, own_explain_outcome: ExplainOutcome, user_kind: UserKind
     ):
@@ -99,30 +154,26 @@ class SqliteStorage:
                 User.kind == user_kind, User.id != own_explain_outcome.user
             )
             other_users = list(session.exec(other_users_statement))
+            if not other_users:
+                return None
 
             statement = (
                 select(ExplainOutcome)
                 .where(
-                    ExplainOutcome.annotated_image
-                    == own_explain_outcome.annotated_image,
-                    ExplainOutcome.reference_image1
-                    == own_explain_outcome.reference_image1,
-                    ExplainOutcome.reference_image2
-                    == own_explain_outcome.reference_image2,
                     ExplainOutcome.user.in_(other_users),
                 )
-                .limit(10)
             )
-            peer_ratings = list(session.exec(statement))
+            peer_ratings = [
+                outcome
+                for outcome in session.exec(statement)
+                if outcome.candidate_key == own_explain_outcome.candidate_key
+            ]
             if not peer_ratings:
                 return None
             else:
                 return random.choice(list(peer_ratings))
 
     def fetch_challenges(self, user: User) -> ChallengeData:
-        if state.active_challenge:
-            return state.active_challenge.challenge_data
-
         datasets, explain_challenges = get_available_explain_challenges(
             user_role=user.role
         )
@@ -139,7 +190,9 @@ class SqliteStorage:
                     outcome = own_explain_outcomes[task.candidate_key]
                     challenge.tasks[task_idx] = outcome
 
-        rate_outcomes = {out.task_key: out for out in self.fetch_rate_outcomes(user.id)}
+        rate_outcomes = {
+            out.candidate_key: out for out in self.fetch_rate_outcomes(user.id)
+        }
 
         challenges: dict[ChallengeId, ExplainChallenge | RateChallenge] = {
             k: v for k, v in explain_challenges.items()
@@ -161,8 +214,25 @@ class SqliteStorage:
             tasks: list[RateTask | RateOutcome] = []
             for explain_outcome in explain_challenge.tasks:
                 assert isinstance(explain_outcome, ExplainOutcome)
-                if explain_outcome.task_key in rate_outcomes:
-                    tasks.append(rate_outcomes[explain_outcome.task_key])
+                reference_explain_outcomes[
+                    (explain_outcome.candidate_key, explain_outcome.user)
+                ] = explain_outcome
+
+                rate_outcome = rate_outcomes.get(explain_outcome.candidate_key)
+                if rate_outcome is not None:
+                    for reference_user in (rate_outcome.peer, rate_outcome.ai):
+                        reference_outcome = self.fetch_reference_explain_outcome(
+                            explain_outcome.candidate_key, reference_user
+                        )
+                        if reference_outcome is not None:
+                            reference_explain_outcomes[
+                                (
+                                    reference_outcome.candidate_key,
+                                    reference_outcome.user,
+                                )
+                            ] = reference_outcome
+
+                    tasks.append(rate_outcome)
                     continue
 
                 peer_explain_outcome = self.fetch_random_reference_explain_outcome(
@@ -188,11 +258,11 @@ class SqliteStorage:
                         continue
 
                 reference_explain_outcomes[
-                    (peer_explain_outcome.task_key, peer_explain_outcome.user)
+                    (peer_explain_outcome.candidate_key, peer_explain_outcome.user)
                 ] = peer_explain_outcome
 
                 reference_explain_outcomes[
-                    (ai_explain_outcome.task_key, ai_explain_outcome.user)
+                    (ai_explain_outcome.candidate_key, ai_explain_outcome.user)
                 ] = ai_explain_outcome
 
                 tasks.append(

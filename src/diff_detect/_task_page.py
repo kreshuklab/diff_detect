@@ -1,4 +1,5 @@
 import base64
+import random
 from io import BytesIO
 from typing import Any, Callable
 
@@ -29,6 +30,9 @@ from .models import (
     RateOutcome,
     User,
 )
+from .models import (
+    Image as StudyImage,
+)
 
 
 def _image_data_url(image: PILImage.Image) -> str:
@@ -36,6 +40,118 @@ def _image_data_url(image: PILImage.Image) -> str:
     image.save(buffer, format="JPEG", quality=85)
     encoded_image = base64.b64encode(buffer.getvalue()).decode("ascii")
     return f"data:image/jpeg;base64,{encoded_image}"
+
+
+def _scale_annotation(annotation: Annotation, scale: float) -> list[dict[str, Any]]:
+    def scaled(value: Any) -> Any:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return value * scale
+        return value
+
+    objects = annotation.raw.model_dump(mode="json", exclude_unset=True).get(
+        "objects", []
+    )
+    scaled_objects = []
+    for obj in objects:
+        scaled_obj = dict(obj)
+        for key in ("left", "top", "width", "height", "radius", "rx", "ry"):
+            if key in scaled_obj:
+                scaled_obj[key] = scaled(scaled_obj[key])
+        if isinstance(scaled_obj.get("path"), list):
+            scaled_obj["path"] = [
+                [part if idx == 0 else scaled(part) for idx, part in enumerate(segment)]
+                for segment in scaled_obj["path"]
+            ]
+        if isinstance(scaled_obj.get("pathOffset"), dict):
+            scaled_obj["pathOffset"] = {
+                key: scaled(value) for key, value in scaled_obj["pathOffset"].items()
+            }
+        scaled_objects.append(scaled_obj)
+    return scaled_objects
+
+
+def _annotation_figure(image: PILImage.Image, annotation: Annotation | None):
+    from matplotlib.figure import Figure
+    from matplotlib.patches import PathPatch, Rectangle
+    from matplotlib.path import Path as MplPath
+
+    width, height = image.size
+    fig = Figure(figsize=(4, 4 * height / width), dpi=150)
+    ax = fig.add_axes((0, 0, 1, 1))
+    ax.imshow(image)
+    ax.set_xlim(0, width)
+    ax.set_ylim(height, 0)
+    ax.axis("off")
+
+    if annotation is None:
+        return fig
+
+    for obj in _scale_annotation(annotation, 1 / EXPLAIN_CANVAS_SCALE):
+        stroke = obj.get("stroke") or "#e83e8c"
+        line_width = max(1.5, min(float(obj.get("strokeWidth") or 3), 5))
+        object_type = str(obj.get("type", "")).lower()
+        if object_type == "rect":
+            ax.add_patch(
+                Rectangle(
+                    (float(obj.get("left") or 0), float(obj.get("top") or 0)),
+                    float(obj.get("width") or 0) * float(obj.get("scaleX") or 1),
+                    float(obj.get("height") or 0) * float(obj.get("scaleY") or 1),
+                    fill=False,
+                    edgecolor=stroke,
+                    linewidth=line_width,
+                )
+            )
+        elif object_type == "path" and isinstance(obj.get("path"), list):
+            vertices = []
+            codes = []
+            for segment in obj["path"]:
+                if not segment:
+                    continue
+                command = segment[0]
+                coords = [float(value) for value in segment[1:]]
+                if command == "M" and len(coords) >= 2:
+                    vertices.append((coords[0], coords[1]))
+                    codes.append(MplPath.MOVETO)
+                elif command == "L" and len(coords) >= 2:
+                    vertices.append((coords[0], coords[1]))
+                    codes.append(MplPath.LINETO)
+                elif command == "Q" and len(coords) >= 4:
+                    vertices.extend([(coords[0], coords[1]), (coords[2], coords[3])])
+                    codes.extend([MplPath.CURVE3, MplPath.CURVE3])
+                elif command == "C" and len(coords) >= 6:
+                    vertices.extend(
+                        [
+                            (coords[0], coords[1]),
+                            (coords[2], coords[3]),
+                            (coords[4], coords[5]),
+                        ]
+                    )
+                    codes.extend([MplPath.CURVE4, MplPath.CURVE4, MplPath.CURVE4])
+                elif command == "Z":
+                    vertices.append((0, 0))
+                    codes.append(MplPath.CLOSEPOLY)
+            if vertices:
+                ax.add_patch(
+                    PathPatch(
+                        MplPath(vertices, codes),
+                        fill=False,
+                        edgecolor=stroke,
+                        linewidth=line_width,
+                        capstyle=obj.get("strokeLineCap") or "round",
+                        joinstyle=obj.get("strokeLineJoin") or "round",
+                    )
+                )
+    return fig
+
+
+@st.cache_data(max_entries=100, show_spinner=False)
+def _rate_annotation_figure(image: StudyImage, annotation_json: str | None):
+    annotation = (
+        None
+        if annotation_json is None
+        else Annotation.model_validate_json(annotation_json)
+    )
+    return _annotation_figure(load_study_image(image), annotation)
 
 
 def render_task_page() -> PageKey | None:
@@ -356,9 +472,144 @@ def _render_explain_task(
     return save
 
 
-def _render_rate_task(user: User, task: ActiveRateChallenge) -> Callable[[], None]:
-    st.error("Rate task rendering not implemented yet.")
-    return lambda: None
+def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], None]:
+    rate_task = active.challenge.tasks[state.task_idx]
+    candidate_image_ids = rate_task.candidate_key
+    candidate_images = {
+        image_id: get_image(
+            active.challenge_data.datasets,
+            rate_task.dataset_id,
+            image_id,
+        )
+        for image_id in candidate_image_ids
+    }
+
+    st.header(CHALLENGE_NAMES[active.challenge.id])
+    st.subheader("Original image set")
+    for col, image_id in zip(st.columns(3), candidate_image_ids):
+        with col:
+            st.image(load_study_image(candidate_images[image_id]), width="stretch")
+
+    users_by_role = {"own": rate_task.own, "peer": rate_task.peer, "ai": rate_task.ai}
+    candidates = {}
+    for role, user_id in users_by_role.items():
+        outcome = active.challenge_data.reference_explain_outcomes.get(
+            (rate_task.candidate_key, user_id)
+        )
+        if outcome is None:
+            st.error("Missing explanation candidates for this rating task.")
+            return lambda: None
+        candidates[role] = outcome
+
+    order_key = (
+        f"rate_order_{active.challenge.id}_{state.task_idx}_"
+        f"{'_'.join(rate_task.candidate_key)}_{rate_task.own}_{rate_task.peer}_{rate_task.ai}"
+    )
+    order = st.session_state.get(order_key)
+    if not isinstance(order, list) or sorted(order) != ["ai", "own", "peer"]:
+        order = ["own", "peer", "ai"]
+        random.shuffle(order)
+        st.session_state[order_key] = order
+
+    labels_by_role = {role: chr(ord("A") + idx) for idx, role in enumerate(order)}
+    roles_by_label = {label: role for role, label in labels_by_role.items()}
+    labels = list(roles_by_label)
+    most_convincing_key = f"rate_most_convincing_{active.challenge.id}_{state.task_idx}"
+    most_likely_ai_key = f"rate_most_likely_ai_{active.challenge.id}_{state.task_idx}"
+
+    def selected_user(key: str) -> str | None:
+        label = st.session_state.get(key)
+        if label is None:
+            return None
+        return users_by_role[roles_by_label[label]]
+
+    def save_current_rating(*, toast: bool = False) -> None:
+        most_convincing = selected_user(most_convincing_key)
+        most_likely_ai = selected_user(most_likely_ai_key)
+        if most_convincing is None and most_likely_ai is None:
+            return
+
+        outcome = RateOutcome(
+            dataset_id=rate_task.dataset_id,
+            annotated_image=rate_task.annotated_image,
+            reference_image1=rate_task.reference_image1,
+            reference_image2=rate_task.reference_image2,
+            own=rate_task.own,
+            peer=rate_task.peer,
+            ai=rate_task.ai,
+            most_convincing=most_convincing,
+            most_likely_ai=most_likely_ai,
+        )
+        storage.upsert_rate_outcome(outcome)
+        active.challenge.tasks[state.task_idx] = outcome
+        state.active_challenge = active
+        if toast:
+            state.toaster = "Rating saved."
+
+    st.subheader("Explanations")
+    for col, role in zip(st.columns(3), order):
+        candidate = candidates[role]
+        annotated_image = get_image(
+            active.challenge_data.datasets,
+            candidate.dataset_id,
+            candidate.annotated_image,
+        )
+        annotation_json = (
+            None
+            if candidate.annotation is None
+            else candidate.annotation.model_dump_json(exclude_unset=True)
+        )
+
+        with col:
+            st.markdown(f"#### Explanation {labels_by_role[role]}")
+            st.pyplot(
+                _rate_annotation_figure(annotated_image, annotation_json),
+                clear_figure=False,
+                width="stretch",
+            )
+            st.write(candidate.explanation or "")
+
+    def selected_index(choice: str | None) -> int | None:
+        if choice is None:
+            return None
+        for idx, label in enumerate(labels):
+            if users_by_role[roles_by_label[label]] == choice:
+                return idx
+        return None
+
+    existing_most_convincing = (
+        rate_task.most_convincing if isinstance(rate_task, RateOutcome) else None
+    )
+    existing_most_likely_ai = (
+        rate_task.most_likely_ai if isinstance(rate_task, RateOutcome) else None
+    )
+    rating_container = st.container(
+        width="stretch", horizontal=True, horizontal_alignment="center"
+    )
+    with rating_container:
+        st.radio(
+            "Which explanation is most convincing?",
+            labels,
+            index=selected_index(existing_most_convincing),
+            horizontal=True,
+            key=most_convincing_key,
+            on_change=save_current_rating,
+            width="content",
+        )
+        st.radio(
+            "Which explanation was created by AI?",
+            labels,
+            index=selected_index(existing_most_likely_ai),
+            horizontal=True,
+            key=most_likely_ai_key,
+            on_change=save_current_rating,
+            width="content",
+        )
+
+    def save() -> None:
+        save_current_rating(toast=True)
+
+    return save
 
 
 def _build_annotation_payload(

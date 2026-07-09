@@ -17,7 +17,7 @@ def auto_login() -> PageKey | None:
             id=username,
             lab=None,
             kind=UserKind.HUMAN,
-            role=UserRole.PARTICIPANT,
+            role=UserRole.MAINTAINER,
             hashed_password=None,
         )
         storage.add_user(user)
@@ -29,7 +29,7 @@ def auto_login() -> PageKey | None:
 
 def render_login_page() -> PageKey | None:
     st.set_page_config(layout="centered")
-    st.title(":butterfly: Welcome to SpeciFly!")
+    st.title(":butterfly: Welcome to Butterfly detective!")
     st.subheader("Can you tell butterfly species apart?")
     if state.user:
         st.info(f"Logged in as {state.user.id}.")
@@ -130,8 +130,8 @@ def render_login_page() -> PageKey | None:
 
 def render_login_page_with_password() -> PageKey | None:
     st.set_page_config(layout="centered")
-    st.title(":butterfly: Welcome to SpeciFly!")
-    st.subheader("Can you tell butterfly species apart?")
+    st.title(":butterfly: Welcome to Butterfly detective!")
+    st.subheader("Can you tell apart butterfly species by their wings?")
     if state.user:
         st.info(f"Logged in as {state.user.id}.")
         left, right = st.columns(2)

@@ -4,12 +4,13 @@ import streamlit as st
 from streamlit.navigation.page import StreamlitPage
 
 from ._challenge_selection_page import render_challenge_selection_page
+from ._leaderboard_page import render_leaderboard_page
 from ._login_page import auto_login as render_login_page
 from ._page_utils import PageKey
 from ._state import state
 from ._task_page import render_task_page
 
-st.set_page_config(page_title="SpeciFly", page_icon=":butterfly:")
+st.set_page_config(page_title="Butterfly detective", page_icon=":butterfly:")
 
 
 def wrap_page_rendering(page: Callable[[], PageKey | None]) -> Callable[[], None]:
@@ -47,5 +48,11 @@ PAGES: dict[PageKey, StreamlitPage] = {
         title="Current task",
         icon=":material/psychology_alt:",
         url_path="task",
+    ),
+    "leaderboard": st.Page(
+        wrap_page_rendering(render_leaderboard_page),
+        title="Leaderboard",
+        icon=":material/leaderboard:",
+        url_path="leaderboard",
     ),
 }

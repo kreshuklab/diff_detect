@@ -35,9 +35,7 @@ def render_challenge_selection_page() -> PageKey | None:
         explain_col, rate_col = st.columns(2)
         with explain_col:
             if st.button(
-                CHALLENGE_NAMES[explain_challenge_id],
-                key=explain_challenge_id,
-                disabled=explain_challenge.finished,
+                CHALLENGE_NAMES[explain_challenge_id], key=explain_challenge_id
             ):
                 # challenge = challenge_data.explain_challenges[explain_challenge_id]
                 state.active_challenge = ActiveExplainChallenge(
@@ -65,7 +63,7 @@ def render_challenge_selection_page() -> PageKey | None:
                 st.button(
                     CHALLENGE_NAMES[rate_challenge_id],
                     key=rate_challenge_id,
-                    disabled=rate_challenge is None or rate_challenge.finished,
+                    disabled=rate_challenge is None,
                 )
                 and rate_challenge is not None
             ):

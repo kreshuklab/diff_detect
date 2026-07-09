@@ -62,8 +62,8 @@ def get_available_explain_challenges(
         "explain_butterfly_easy",
         "explain_butterfly_difficult",
     ]
-    if user_role == UserRole.MAINTAINER:
-        challenge_ids.insert(0, "explain_dummy")
+    # if user_role == UserRole.MAINTAINER:
+    #     challenge_ids.insert(0, "explain_dummy")
 
     challenges: dict[ExplainChallengeId, ExplainChallenge] = {}
     merged_datasets: dict[DatasetId, Dataset] = {}

@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 
 CHALLENGE_NAMES = {
@@ -5,8 +6,8 @@ CHALLENGE_NAMES = {
     "explain_butterfly_easy": "Butterfly Wings (Easy)",
     "explain_butterfly_difficult": "Butterfly Wings (Difficult)",
     "rate_dummy": "Dummy",
-    "rate_butterfly_easy": "Butterfly (Easy)",
-    "rate_butterfly_difficult": "Butterfly (Difficult)",
+    "rate_butterfly_easy": "Butterfly Wings (Easy)",
+    "rate_butterfly_difficult": "Butterfly Wings (Difficult)",
 }
 DifferenceLabel = Literal["wing outline", "pattern shape", "color"]
 DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
@@ -15,4 +16,4 @@ DIFFERENCE_LABEL_STYLES: dict[DifferenceLabel, dict[str, str]] = {
     "color": {"color": "#e83e8c"},
 }
 DIFFERENCE_LABELS = tuple(DIFFERENCE_LABEL_STYLES)
-EXPLAIN_CANVAS_SCALE = 0.23
+EXPLAIN_CANVAS_SCALE = float(os.getenv("EXPLAIN_CANVAS_SCALE", 0.23))
