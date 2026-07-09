@@ -121,6 +121,8 @@ def _render_board(rows: list[dict[str, object]]) -> None:
 
 
 def render_leaderboard_page() -> PageKey | None:
+    st.set_page_config(initial_sidebar_state="expanded", layout="wide")
+
     user = state.user
     if user is None:
         return "login"
