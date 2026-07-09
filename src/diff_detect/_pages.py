@@ -1,3 +1,4 @@
+import os
 from typing import Callable
 
 import streamlit as st
@@ -5,10 +6,14 @@ from streamlit.navigation.page import StreamlitPage
 
 from ._challenge_selection_page import render_challenge_selection_page
 from ._leaderboard_page import render_leaderboard_page
-from ._login_page import auto_login as render_login_page
 from ._page_utils import PageKey
 from ._state import state
 from ._task_page import render_task_page
+
+if os.getenv("DEV_MODE") == "1":
+    from ._login_page import auto_login as render_login_page
+else:
+    from ._login_page import render_login_page as render_login_page
 
 st.set_page_config(page_title="Butterfly detective", page_icon=":butterfly:")
 
