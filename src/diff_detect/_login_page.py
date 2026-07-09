@@ -46,8 +46,8 @@ def render_login_page() -> PageKey | None:
 
     st.info("Please create an account or login.")
     lab_options = storage.fetch_lab_options()
-    login_tab, create_tab = st.tabs(  # TODO: swap login and create account tabs
-        ["Login", "Create account"], key="login_create_tabs", on_change="rerun"
+    create_tab, login_tab = st.tabs(
+        ["Create account", "Login"], key="login_create_tabs", on_change="rerun"
     )
     with create_tab, st.form("create_form", enter_to_submit=False):
         typed_user_name = st.text_input(
@@ -71,6 +71,9 @@ def render_login_page() -> PageKey | None:
                 "ai_"
             ):
                 st.error("Username cannot be 'ai' or start with 'ai_'.")
+                return
+            if typed_user_name.lower().startswith("dummyuser"):
+                st.error("Username cannot start with 'dummyuser'.")
                 return
             if "/" in typed_user_name:
                 st.error("Username cannot contain slashes.")

@@ -417,6 +417,65 @@ def test_reference_explain_outcome_matches_selection_key(
     assert outcome.candidate_key == own.candidate_key
 
 
+def test_reference_explain_outcome_prefers_real_user_over_dummy(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(_user("ada"))
+    storage.add_user(_user("grace"))
+    storage.add_user(_user("DummyUser1A"))
+    own = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="own",
+        annotation=None,
+    )
+    real_peer = own.model_copy(update={"user": "grace", "explanation": "real"})
+    dummy_peer = own.model_copy(
+        update={"user": "DummyUser1A", "explanation": "dummy"}
+    )
+
+    storage.upsert_explain_outcome(own)
+    storage.upsert_explain_outcome(dummy_peer)
+    storage.upsert_explain_outcome(real_peer)
+
+    outcome = storage.fetch_random_reference_explain_outcome(own, UserKind.HUMAN)
+
+    assert outcome is not None
+    assert outcome.user == "grace"
+
+
+def test_reference_explain_outcome_uses_dummy_when_no_real_user(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    storage.add_user(_user("ada"))
+    storage.add_user(_user("DummyUser1A"))
+    own = ExplainOutcome(
+        dataset_id=DatasetId.BUTTERFLY,
+        annotated_image="butterfly/a",
+        reference_image1="butterfly/b",
+        reference_image2="butterfly/c",
+        user="ada",
+        explanation="own",
+        annotation=None,
+    )
+    dummy_peer = own.model_copy(
+        update={"user": "DummyUser1A", "explanation": "dummy"}
+    )
+
+    storage.upsert_explain_outcome(own)
+    storage.upsert_explain_outcome(dummy_peer)
+
+    outcome = storage.fetch_random_reference_explain_outcome(own, UserKind.HUMAN)
+
+    assert outcome is not None
+    assert outcome.user == "DummyUser1A"
+
+
 def test_fetch_challenges_ignores_stale_active_challenge_when_enabling_rate(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
     SQLModel.metadata.create_all(engine)
@@ -462,6 +521,33 @@ def test_fetch_challenges_ignores_stale_active_challenge_when_enabling_rate(tmp_
         )
     finally:
         state.active_challenge = None
+
+
+def test_fetch_challenges_omits_empty_rate_challenge(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'study.db'}")
+    SQLModel.metadata.create_all(engine)
+    storage = SqliteStorage(engine=engine)
+    user = _user("fynn")
+    storage.add_user(user)
+
+    _, challenge = get_explain_challenge("explain_butterfly_easy")
+    for task in challenge.tasks:
+        storage.upsert_explain_outcome(
+            ExplainOutcome(
+                dataset_id=task.dataset_id,
+                annotated_image=task.annotated_image,
+                reference_image1=task.reference_image1,
+                reference_image2=task.reference_image2,
+                user=user.id,
+                explanation="done",
+                annotation=None,
+            )
+        )
+
+    fresh = storage.fetch_challenges(user)
+
+    assert fresh.explain_challenges["explain_butterfly_easy"].finished
+    assert "rate_butterfly_easy" not in fresh.rate_challenges
 
 
 def test_fetch_challenges_keys_rate_outcomes_by_selection_key(tmp_path):
@@ -814,3 +900,59 @@ def test_leaderboard_scores_explain_and_rate_by_user_and_lab():
             "Score x/2": 1,
         }
     ]
+
+
+def test_leaderboard_filters_dummy_users():
+    users = {
+        "DummyUser1A": _user("DummyUser1A"),
+        "bot": _user("bot", kind=UserKind.AI),
+    }
+    challenge = ExplainChallenge(
+        id="explain_dummy",
+        tasks=[
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+            ),
+        ],
+    )
+
+    explain_user_rows, explain_lab_rows = _score_explain(
+        challenge,
+        [
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                user="DummyUser1A",
+                explanation="dummy",
+                annotation=None,
+            ),
+        ],
+        users,
+    )
+    rate_user_rows, rate_lab_rows = _score_rate(
+        challenge,
+        [
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                own="DummyUser1A",
+                peer="DummyUser2A",
+                ai="bot",
+                most_convincing="DummyUser1A",
+                most_likely_ai="bot",
+            ),
+        ],
+        users,
+    )
+
+    assert explain_user_rows == []
+    assert explain_lab_rows == []
+    assert rate_user_rows == []
+    assert rate_lab_rows == []

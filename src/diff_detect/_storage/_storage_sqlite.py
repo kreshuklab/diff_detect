@@ -23,6 +23,13 @@ from ..models import (
 )
 
 
+DUMMY_USER_PREFIX = "DummyUser"
+
+
+def _is_dummy_user(user_id: UserId) -> bool:
+    return user_id.startswith(DUMMY_USER_PREFIX)
+
+
 class SqliteStorage:
     """A storage backend for diff-detect that uses Sqlite."""
 
@@ -172,6 +179,11 @@ class SqliteStorage:
                 for outcome in session.exec(statement)
                 if outcome.selection_key == own_explain_outcome.selection_key
             ]
+            non_dummy_ratings = [
+                outcome for outcome in peer_ratings if not _is_dummy_user(outcome.user)
+            ]
+            if non_dummy_ratings:
+                peer_ratings = non_dummy_ratings
             if not peer_ratings:
                 return None
             else:
@@ -293,7 +305,8 @@ class SqliteStorage:
                     ),
                 )
 
-            challenges[rate_id] = RateChallenge(id=rate_id, tasks=tasks)
+            if tasks:
+                challenges[rate_id] = RateChallenge(id=rate_id, tasks=tasks)
 
         return ChallengeData(
             datasets=datasets,

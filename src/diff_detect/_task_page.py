@@ -3,6 +3,7 @@ import os
 import random
 from html import escape
 from io import BytesIO
+from time import sleep
 from typing import Any, Callable
 
 import numpy as np
@@ -359,9 +360,15 @@ def render_task_page() -> PageKey | None:
 
     if isinstance(active, ActiveExplainChallenge):
         challenge = active.challenge_data.explain_challenges[active.challenge_id]
+        if state.task_idx >= challenge.task_count:
+            state.toaster = "Please select a different challenge."
+            return "challenge"
         save = _render_explain_task(user, active)
     elif isinstance(active, ActiveRateChallenge):
         challenge = active.challenge_data.challenges[active.challenge_id]
+        if state.task_idx >= challenge.task_count:
+            state.toaster = "Please select a different challenge."
+            return "challenge"
         save = _render_rate_task(user, active)
     else:
         st.error("Challenge state not found.")
@@ -426,7 +433,7 @@ def render_task_page() -> PageKey | None:
                 # and again on the challenge page
                 state.toaster = toast
                 st.balloons()
-                # TODO: sleep?
+                sleep(2)  # for the balloons
                 return "challenge"
 
 
@@ -465,7 +472,7 @@ def _render_explain_task(
                 _image_data_url(load_study_image(candidate_images[image_id]))
                 for image_id in candidate_image_ids
             ],
-            titles=[f"Image {idx + 1}" for idx in range(len(candidate_image_ids))],
+            titles=[f"Specimen {idx + 1}" for idx in range(len(candidate_image_ids))],
             div_style={
                 "display": "flex",
                 "gap": "0.75rem",

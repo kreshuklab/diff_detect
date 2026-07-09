@@ -13,7 +13,7 @@ from ._task_page import render_task_page
 if os.getenv("DEV_MODE") == "1":
     from ._login_page import auto_login as render_login_page
 else:
-    from ._login_page import render_login_page as render_login_page
+    from ._login_page import render_login_page
 
 st.set_page_config(page_title="Butterfly detective", page_icon=":butterfly:")
 

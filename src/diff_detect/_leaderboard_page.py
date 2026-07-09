@@ -42,8 +42,11 @@ def _lab_label(user_id: str, users: dict[str, User]) -> str:
 
 
 def _is_participant(user_id: str, users: dict[str, User]) -> bool:
-    user = users.get(user_id)
-    return user is None or user.kind != UserKind.AI
+    if user_id.lower().startswith("dummyuser"):
+        return False
+    else:
+        user = users.get(user_id)
+        return user is None or user.kind != UserKind.AI
 
 
 def _ranked_rows(scores: Scores, label: str) -> list[dict[str, object]]:
@@ -53,7 +56,7 @@ def _ranked_rows(scores: Scores, label: str) -> list[dict[str, object]]:
             "Correct": correct,  # for sorting
             # "Total": total,
             # "Accuracy": correct / total,
-            f"Score x/{total}": correct,
+            "Score": correct,
         }
         for key, (correct, total) in scores.items()
         if total
