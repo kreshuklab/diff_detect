@@ -29,7 +29,7 @@ def auto_login() -> PageKey | None:
 
 def render_login_page() -> PageKey | None:
     st.set_page_config(layout="centered")
-    st.title(":butterfly: Welcome to Butterfly detective!")
+    st.title(":butterfly: Welcome to Butterfly Detective!")
     st.subheader("Can you tell butterfly species apart?")
     if state.user:
         st.info(f"Logged in as {state.user.id}.")
@@ -138,7 +138,7 @@ def render_login_page() -> PageKey | None:
 
 def render_login_page_with_password() -> PageKey | None:
     st.set_page_config(layout="centered")
-    st.title(":butterfly: Welcome to Butterfly detective!")
+    st.title(":butterfly: Welcome to Butterfly Detective!")
     st.subheader("Can you tell apart butterfly species by their wings?")
     if state.user:
         st.info(f"Logged in as {state.user.id}.")

@@ -15,7 +15,7 @@ if os.getenv("DEV_MODE") == "1":
 else:
     from ._login_page import render_login_page
 
-st.set_page_config(page_title="Butterfly detective", page_icon=":butterfly:")
+st.set_page_config(page_title="Butterfly Detective", page_icon=":butterfly:")
 
 
 def wrap_page_rendering(page: Callable[[], PageKey | None]) -> Callable[[], None]:
