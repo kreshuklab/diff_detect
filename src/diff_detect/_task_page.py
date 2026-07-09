@@ -467,7 +467,7 @@ def _render_explain_task(
     st.header(CHALLENGE_NAMES[active.challenge.id])
 
     if selected_odd_image is None:
-        st.subheader("Choose the unique specimen")
+        st.subheader("Choose the odd one out")
         clicked_image_idx = clickable_images(
             paths=[
                 _image_data_url(load_study_image(candidate_images[image_id]))
