@@ -148,13 +148,18 @@ class SqliteStorage:
         return None
 
     def fetch_random_reference_explain_outcome(
-        self, own_explain_outcome: ExplainOutcome, user_kind: UserKind
+        self,
+        own_explain_outcome: ExplainOutcome,
+        user_kind: UserKind,
+        filter_out_user: UserId | None = None,
     ):
         """Fetch all explanations of the same task by other users of a specific kind (human or AI)."""
         with Session(self.engine) as session:
-            other_users_statement = select(User.id).where(
-                User.kind == user_kind, User.id != own_explain_outcome.user
-            )
+            whereclause = [User.kind == user_kind, User.id != own_explain_outcome.user]
+            if filter_out_user is not None:
+                whereclause.append(User.id != filter_out_user)
+
+            other_users_statement = select(User.id).where(*whereclause)
             other_users = list(session.exec(other_users_statement))
             if not other_users:
                 return None
@@ -256,12 +261,17 @@ class SqliteStorage:
                     explain_outcome, UserKind.AI
                 )
                 if ai_explain_outcome is None:
-                    # If no AI outcome is found, we cannot create a rate task for this explain outcome.
-                    if user.role == UserRole.MAINTAINER:
-                        # If the user is a maintainer, we can use the same outcome as the AI outcome for testing purposes.
-                        ai_explain_outcome = explain_outcome
-                    else:
-                        continue
+                    # fallback to another peer annotation
+                    ai_explain_outcome = self.fetch_random_reference_explain_outcome(
+                        explain_outcome, UserKind.HUMAN, peer_explain_outcome.user
+                    )
+                    if ai_explain_outcome is None:
+                        # If no AI outcome is found, we cannot create a rate task for this explain outcome.
+                        if user.role == UserRole.MAINTAINER:
+                            # If the user is a maintainer, we can use the same outcome as the AI outcome for testing purposes.
+                            ai_explain_outcome = explain_outcome
+                        else:
+                            continue
 
                 reference_explain_outcomes[
                     (peer_explain_outcome.selection_key, peer_explain_outcome.user)
