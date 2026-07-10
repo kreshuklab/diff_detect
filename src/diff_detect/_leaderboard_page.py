@@ -1,12 +1,15 @@
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 import streamlit as st
 
 from diff_detect.challenges import get_available_explain_challenges
 from diff_detect.common import CHALLENGE_NAMES
 from diff_detect.models import (
+    Dataset,
+    DatasetId,
     ExplainChallenge,
     ExplainOutcome,
+    ExplainTask,
     RateOutcome,
     User,
     UserKind,
@@ -64,12 +67,42 @@ def _ranked_rows(
     return sorted(rows, key=lambda row: (-row["Score"], row[label]))
 
 
+def _correct_odd_image(
+    task: ExplainTask, datasets: dict[DatasetId, Dataset] | None
+) -> str:
+    if datasets is None or task.dataset_id not in datasets:
+        return task.annotated_image
+
+    task_images = [
+        datasets[task.dataset_id].images.get(image_id) for image_id in task.image_ids
+    ]
+    if any(image is None for image in task_images):
+        return task.annotated_image
+
+    taxa = [
+        (image.image_info.get("species"), image.image_info.get("subspecies"))
+        for image in task_images
+        if image is not None
+    ]
+    counts = Counter(taxa)
+    odd_images = [
+        image.image_id
+        for image, taxon in zip(task_images, taxa)
+        if image is not None and counts[taxon] == 1
+    ]
+    return odd_images[0] if len(odd_images) == 1 else task.annotated_image
+
+
 def _score_explain(
     challenge: ExplainChallenge,
     outcomes: list[ExplainOutcome],
     users: dict[str, User],
+    datasets: dict[DatasetId, Dataset] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-    answers = {task.candidate_key: task.annotated_image for task in challenge.tasks}
+    answers = {
+        task.candidate_key: _correct_odd_image(task, datasets)
+        for task in challenge.tasks
+    }
     user_scores: Scores = defaultdict(lambda: [0, 0])
     lab_scores: Scores = defaultdict(lambda: [0, 0])
     for outcome in outcomes:
@@ -142,7 +175,7 @@ def render_leaderboard_page() -> PageKey | None:
 
     st.header("Leaderboard")
 
-    _, challenges = get_available_explain_challenges(UserRole.PARTICIPANT)
+    datasets, challenges = get_available_explain_challenges(UserRole.PARTICIPANT)
     users = {user.id: user for user in storage.fetch_users()}
     explain_outcomes = storage.fetch_all_explain_outcomes()
     rate_outcomes = storage.fetch_all_rate_outcomes()
@@ -150,7 +183,7 @@ def render_leaderboard_page() -> PageKey | None:
     for challenge_id, challenge in challenges.items():
         st.subheader(CHALLENGE_NAMES[challenge_id])
         explain_user_rows, explain_lab_rows = _score_explain(
-            challenge, explain_outcomes, users
+            challenge, explain_outcomes, users, datasets
         )
         rate_user_rows, rate_lab_rows = _score_rate(challenge, rate_outcomes, users)
 

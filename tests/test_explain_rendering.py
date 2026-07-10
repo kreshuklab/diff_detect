@@ -17,10 +17,12 @@ from diff_detect.models import (
     ActiveExplainChallenge,
     Annotation,
     ChallengeData,
+    Dataset,
     DatasetId,
     ExplainChallenge,
     ExplainOutcome,
     ExplainTask,
+    Image,
     RateChallenge,
     RateOutcome,
     RateTask,
@@ -988,6 +990,66 @@ def test_leaderboard_scores_only_tasks_in_challenge():
     assert explain_lab_rows == [{"Lab": "lab", "Score": 1.0}]
     assert rate_user_rows == [{"User": "Ada (lab)", "Score": 1}]
     assert rate_lab_rows == [{"Lab": "lab", "Score": 1.0}]
+
+
+def test_leaderboard_scores_explain_by_unique_taxon():
+    users = {"ada": _user("ada")}
+    challenge = ExplainChallenge(
+        id="explain_dummy",
+        tasks=[
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+            ),
+        ],
+    )
+    dataset = Dataset(
+        images={
+            "butterfly/a": Image(
+                dataset_id=DatasetId.BUTTERFLY,
+                image_id="butterfly/a",
+                image_info={"species": "same", "subspecies": "same"},
+                image_group="1",
+                source="a.png",
+            ),
+            "butterfly/b": Image(
+                dataset_id=DatasetId.BUTTERFLY,
+                image_id="butterfly/b",
+                image_info={"species": "same", "subspecies": "same"},
+                image_group="1",
+                source="b.png",
+            ),
+            "butterfly/c": Image(
+                dataset_id=DatasetId.BUTTERFLY,
+                image_id="butterfly/c",
+                image_info={"species": "odd", "subspecies": "odd"},
+                image_group="1",
+                source="c.png",
+            ),
+        }
+    )
+
+    user_rows, lab_rows = _score_explain(
+        challenge,
+        [
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/c",
+                reference_image1="butterfly/a",
+                reference_image2="butterfly/b",
+                user="ada",
+                explanation="picked the real odd specimen",
+                annotation=None,
+            ),
+        ],
+        users,
+        {DatasetId.BUTTERFLY: dataset},
+    )
+
+    assert user_rows == [{"User": "Ada (lab)", "Score": 1}]
+    assert lab_rows == [{"Lab": "lab", "Score": 1.0}]
 
 
 def test_leaderboard_filters_dummy_users():
