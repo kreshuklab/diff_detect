@@ -378,12 +378,19 @@ def render_task_page() -> PageKey | None:
     bottom_left, bottom_center, bottom_right = st.columns(
         [0.1, 0.8, 0.1], vertical_alignment="bottom"
     )
+
+    def navigate_to_task(task_idx: int) -> None:
+        save()
+        state.task_idx = task_idx
+
     with bottom_left:
         if state.task_idx > 0:
-            if st.button("Previous", width="stretch"):
-                save()
-                state.task_idx -= 1
-                st.rerun()
+            st.button(
+                "Previous",
+                width="stretch",
+                on_click=navigate_to_task,
+                args=(state.task_idx - 1,),
+            )
 
     with bottom_center:
         task_cols = st.columns(
@@ -395,7 +402,7 @@ def render_task_page() -> PageKey | None:
         )
         for idx, col in enumerate(task_cols):
             with col:
-                if st.button(
+                st.button(
                     str(idx + 1) if idx == state.task_idx else "",
                     help=f"Task {idx + 1}",
                     key=f"task_button_{idx}",
@@ -411,20 +418,21 @@ def render_task_page() -> PageKey | None:
                     if isinstance(challenge.tasks[idx], (ExplainOutcome, RateOutcome))
                     else ":material/check_box_outline_blank:",
                     icon_position="left",
-                ):
-                    save()
-                    state.task_idx = idx
-                    st.rerun()
+                    on_click=navigate_to_task,
+                    args=(idx,),
+                )
         # st.progress(
         #     challenge.progress,
         #     text=f"{CHALLENGE_NAMES[challenge.id]} - {challenge.done_count}/{challenge.task_count}",
         # )
     with bottom_right:
         if state.task_idx < challenge.task_count - 1:
-            if st.button("Next", width="stretch"):
-                save()
-                state.task_idx += 1
-                st.rerun()
+            st.button(
+                "Next",
+                width="stretch",
+                on_click=navigate_to_task,
+                args=(state.task_idx + 1,),
+            )
         else:
             if st.button("Finish", width="stretch"):
                 save()
