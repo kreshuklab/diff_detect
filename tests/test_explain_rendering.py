@@ -992,6 +992,62 @@ def test_leaderboard_scores_only_tasks_in_challenge():
     assert rate_lab_rows == [{"Lab": "lab", "Score": 1.0}]
 
 
+def test_leaderboard_lab_average_uses_member_point_scores():
+    users = {"ada": _user("ada"), "grace": _user("grace"), "bot": _user("bot", kind=UserKind.AI)}
+    challenge = ExplainChallenge(
+        id="explain_dummy",
+        tasks=[
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+            ),
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+            ),
+        ],
+    )
+
+    _, lab_rows = _score_rate(
+        challenge,
+        [
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                own=own,
+                peer="peer",
+                ai="bot",
+                most_convincing="peer",
+                most_likely_ai="bot",
+            )
+            for own in ("ada", "grace")
+        ]
+        + [
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+                own=own,
+                peer="peer",
+                ai="bot",
+                most_convincing="peer",
+                most_likely_ai="bot",
+            )
+            for own in ("ada", "grace")
+        ],
+        users,
+    )
+
+    assert lab_rows == [{"Lab": "lab", "Score": 2.0}]
+
+
 def test_leaderboard_scores_explain_by_unique_taxon():
     users = {"ada": _user("ada")}
     challenge = ExplainChallenge(

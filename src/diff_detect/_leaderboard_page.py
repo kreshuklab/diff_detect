@@ -21,11 +21,16 @@ from ._state import state
 from ._storage import storage
 
 Scores = dict[str, list[int]]
+LabScores = dict[str, dict[str, int]]
 
 
 def _add_score(scores: Scores, key: str, correct: bool) -> None:
     scores[key][0] += int(correct)
     scores[key][1] += 1
+
+
+def _add_lab_score(scores: LabScores, lab: str, user: str, correct: bool) -> None:
+    scores[lab][user] = scores[lab].get(user, 0) + int(correct)
 
 
 def _user_label(user_id: str, users: dict[str, User]) -> str:
@@ -53,18 +58,28 @@ def _is_participant(user_id: str, users: dict[str, User]) -> bool:
         return user is None or user.kind != UserKind.AI
 
 
-def _ranked_rows(
-    scores: Scores, label: str, *, average: bool = False
-) -> list[dict[str, object]]:
+def _ranked_rows(scores: Scores, label: str) -> list[dict[str, object]]:
     rows = [
         {
             label: key,
-            "Score": correct / total if average else correct,
+            "Score": correct,
         }
         for key, (correct, total) in scores.items()
         if total
     ]
     return sorted(rows, key=lambda row: (-row["Score"], row[label]))
+
+
+def _ranked_lab_rows(scores: LabScores) -> list[dict[str, object]]:
+    rows = [
+        {
+            "Lab": lab,
+            "Score": sum(user_scores.values()) / len(user_scores),
+        }
+        for lab, user_scores in scores.items()
+        if user_scores
+    ]
+    return sorted(rows, key=lambda row: (-row["Score"], row["Lab"]))
 
 
 def _correct_odd_image(
@@ -104,17 +119,16 @@ def _score_explain(
         for task in challenge.tasks
     }
     user_scores: Scores = defaultdict(lambda: [0, 0])
-    lab_scores: Scores = defaultdict(lambda: [0, 0])
+    lab_scores: LabScores = defaultdict(dict)
     for outcome in outcomes:
         answer = answers.get(outcome.candidate_key)
         if answer is None or not _is_participant(outcome.user, users):
             continue
         correct = outcome.annotated_image == answer
-        _add_score(user_scores, _user_label(outcome.user, users), correct)
-        _add_score(lab_scores, _lab_label(outcome.user, users), correct)
-    return _ranked_rows(user_scores, "User"), _ranked_rows(
-        lab_scores, "Lab", average=True
-    )
+        user_label = _user_label(outcome.user, users)
+        _add_score(user_scores, user_label, correct)
+        _add_lab_score(lab_scores, _lab_label(outcome.user, users), user_label, correct)
+    return _ranked_rows(user_scores, "User"), _ranked_lab_rows(lab_scores)
 
 
 def _score_rate(
@@ -124,7 +138,7 @@ def _score_rate(
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     answers = {task.candidate_key for task in challenge.tasks}
     user_scores: Scores = defaultdict(lambda: [0, 0])
-    lab_scores: Scores = defaultdict(lambda: [0, 0])
+    lab_scores: LabScores = defaultdict(dict)
     for outcome in outcomes:
         if outcome.candidate_key not in answers or not _is_participant(
             outcome.own, users
@@ -133,11 +147,10 @@ def _score_rate(
         if outcome.most_likely_ai is None:
             continue
         correct = outcome.most_likely_ai == outcome.ai
-        _add_score(user_scores, _user_label(outcome.own, users), correct)
-        _add_score(lab_scores, _lab_label(outcome.own, users), correct)
-    return _ranked_rows(user_scores, "User"), _ranked_rows(
-        lab_scores, "Lab", average=True
-    )
+        user_label = _user_label(outcome.own, users)
+        _add_score(user_scores, user_label, correct)
+        _add_lab_score(lab_scores, _lab_label(outcome.own, users), user_label, correct)
+    return _ranked_rows(user_scores, "User"), _ranked_lab_rows(lab_scores)
 
 
 def _render_board(rows: list[dict[str, object]]) -> None:
