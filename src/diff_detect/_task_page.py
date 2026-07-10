@@ -303,7 +303,7 @@ def _annotation_figure(image: PILImage.Image, annotation: Annotation | None):
     return fig
 
 
-@st.cache_data(max_entries=100, show_spinner=False)
+@st.cache_data(max_entries=500, show_spinner=False)
 def _rate_annotation_figure(image: StudyImage, annotation_json: str | None):
     annotation = (
         None

@@ -1,3 +1,5 @@
+import streamlit as st
+
 from .models import (
     Dataset,
     DatasetId,
@@ -6,6 +8,7 @@ from .models import (
 )
 
 
+@st.cache_data(max_entries=500, show_spinner=False)
 def get_image(
     datasets: dict[DatasetId, Dataset],
     dataset_id: DatasetId,
