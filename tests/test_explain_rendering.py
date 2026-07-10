@@ -138,7 +138,7 @@ def test_scale_annotation_scales_geometry_only():
 def test_explain_challenge_loads_csv_without_ai_annotations():
     datasets, challenge = get_explain_challenge("explain_butterfly_easy")
 
-    assert challenge.task_count == 10
+    assert challenge.task_count == 3
     assert len(datasets[DatasetId.BUTTERFLY].images) == 30
     first_task = challenge.tasks[0]
     assert isinstance(first_task, ExplainTask)
@@ -146,6 +146,16 @@ def test_explain_challenge_loads_csv_without_ai_annotations():
     first_image = datasets[DatasetId.BUTTERFLY].images[first_task.annotated_image]
     assert first_image.source.startswith("butterfly/download/triple_")
     assert first_image.image_info["camid"].startswith("CAM")
+
+
+def test_explain_challenge_respects_max_tasks_per_challenge(monkeypatch):
+    monkeypatch.setenv("MAX_TASKS_PER_CHALLENGE", "1")
+    get_explain_challenge.clear()
+    try:
+        _, challenge = get_explain_challenge("explain_butterfly_easy")
+        assert challenge.task_count == 1
+    finally:
+        get_explain_challenge.clear()
 
 
 def test_sqlite_storage_upserts_explain_outcome(tmp_path):
@@ -884,27 +894,100 @@ def test_leaderboard_scores_explain_and_rate_by_user_and_lab():
     assert explain_user_rows == [
         {
             "User": "Ada (ada)",
-            "Score x/1": 1,
+            "Score": 1,
         },
         {
             "User": "Grace (grace)",
-            "Score x/1": 0,
+            "Score": 0,
         },
     ]
     assert explain_lab_rows == [
         {
             "Lab": "lab",
-            "Score x/2": 1,
+            "Score": 1,
         }
     ]
     assert rate_user_rows[0]["User"] == "Ada (ada)"
-    assert rate_user_rows[0]["Score x/1"] == 1
+    assert rate_user_rows[0]["Score"] == 1
     assert rate_lab_rows == [
         {
             "Lab": "lab",
-            "Score x/2": 1,
+            "Score": 1,
         }
     ]
+
+
+def test_leaderboard_scores_only_tasks_in_challenge():
+    users = {"ada": _user("ada"), "bot": _user("bot", kind=UserKind.AI)}
+    challenge = ExplainChallenge(
+        id="explain_dummy",
+        tasks=[
+            ExplainTask(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+            ),
+        ],
+    )
+
+    explain_user_rows, explain_lab_rows = _score_explain(
+        challenge,
+        [
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                user="ada",
+                explanation="in limit",
+                annotation=None,
+            ),
+            ExplainOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+                user="ada",
+                explanation="beyond limit",
+                annotation=None,
+            ),
+        ],
+        users,
+    )
+    rate_user_rows, rate_lab_rows = _score_rate(
+        challenge,
+        [
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/a",
+                reference_image1="butterfly/b",
+                reference_image2="butterfly/c",
+                own="ada",
+                peer="grace",
+                ai="bot",
+                most_convincing="ada",
+                most_likely_ai="bot",
+            ),
+            RateOutcome(
+                dataset_id=DatasetId.BUTTERFLY,
+                annotated_image="butterfly/d",
+                reference_image1="butterfly/e",
+                reference_image2="butterfly/f",
+                own="ada",
+                peer="grace",
+                ai="bot",
+                most_convincing="ada",
+                most_likely_ai="bot",
+            ),
+        ],
+        users,
+    )
+
+    assert explain_user_rows == [{"User": "Ada (ada)", "Score": 1}]
+    assert explain_lab_rows == [{"Lab": "lab", "Score": 1}]
+    assert rate_user_rows == [{"User": "Ada (ada)", "Score": 1}]
+    assert rate_lab_rows == [{"Lab": "lab", "Score": 1}]
 
 
 def test_leaderboard_filters_dummy_users():

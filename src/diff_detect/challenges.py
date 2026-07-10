@@ -126,10 +126,9 @@ def get_explain_challenge(
         "Each task must have exactly 3 images."
     )
 
+    max_tasks_per_challenge = int(os.getenv("MAX_TASKS_PER_CHALLENGE", 3))
     tasks: list[ExplainTask] = []
-    for task_id in sorted(image_groups.keys())[
-        : os.getenv("MAX_TASKS_PER_CHALLENGE", 5)
-    ]:
+    for task_id in sorted(image_groups.keys())[:max_tasks_per_challenge]:
         group = image_groups[task_id]
         tasks.append(
             ExplainTask(
