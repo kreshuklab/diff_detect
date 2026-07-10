@@ -29,9 +29,10 @@ def _user_label(user_id: str, users: dict[str, User]) -> str:
     user = users.get(user_id)
     if user is None:
         return user_id
-    if user.name == user.id:
-        return user.id
-    return f"{user.name} ({user.id})"
+    if user.lab:
+        return f"{user.name} ({user.lab})"
+    else:
+        return user.name
 
 
 def _lab_label(user_id: str, users: dict[str, User]) -> str:
