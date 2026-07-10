@@ -721,6 +721,8 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
         most_likely_ai = selected_user(most_likely_ai_key)
         if most_convincing is None and most_likely_ai is None:
             return
+        if _rate_choices_saved(rate_task, most_convincing, most_likely_ai):
+            return
 
         outcome = RateOutcome(
             dataset_id=rate_task.dataset_id,
@@ -777,34 +779,48 @@ def _render_rate_task(user: User, active: ActiveRateChallenge) -> Callable[[], N
     existing_most_likely_ai = (
         rate_task.most_likely_ai if isinstance(rate_task, RateOutcome) else None
     )
-    st.divider()
-    rating_container = st.container(
-        width="stretch", horizontal=True, horizontal_alignment="center"
-    )
-    with rating_container:
-        st.radio(
-            "Which explanation is most convincing?",
-            labels,
-            index=selected_index(existing_most_convincing),
-            horizontal=True,
-            key=most_convincing_key,
-            on_change=save_current_rating,
-            width="content",
+    @st.fragment
+    def render_rating_controls() -> None:
+        st.divider()
+        rating_container = st.container(
+            width="stretch", horizontal=True, horizontal_alignment="center"
         )
-        st.radio(
-            "Which explanation was created by AI?",
-            labels,
-            index=selected_index(existing_most_likely_ai),
-            horizontal=True,
-            key=most_likely_ai_key,
-            on_change=save_current_rating,
-            width="content",
-        )
+        with rating_container:
+            st.radio(
+                "Which explanation is most convincing?",
+                labels,
+                index=selected_index(existing_most_convincing),
+                horizontal=True,
+                key=most_convincing_key,
+                on_change=save_current_rating,
+                width="content",
+            )
+            st.radio(
+                "Which explanation was created by AI?",
+                labels,
+                index=selected_index(existing_most_likely_ai),
+                horizontal=True,
+                key=most_likely_ai_key,
+                on_change=save_current_rating,
+                width="content",
+            )
+
+    render_rating_controls()
 
     def save() -> None:
-        save_current_rating(toast=True)
+        save_current_rating()
 
     return save
+
+
+def _rate_choices_saved(
+    rate_task: object, most_convincing: str | None, most_likely_ai: str | None
+) -> bool:
+    return (
+        isinstance(rate_task, RateOutcome)
+        and rate_task.most_convincing == most_convincing
+        and rate_task.most_likely_ai == most_likely_ai
+    )
 
 
 def _build_annotation_payload(
