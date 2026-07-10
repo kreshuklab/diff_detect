@@ -50,25 +50,18 @@ def _is_participant(user_id: str, users: dict[str, User]) -> bool:
         return user is None or user.kind != UserKind.AI
 
 
-def _ranked_rows(scores: Scores, label: str) -> list[dict[str, object]]:
+def _ranked_rows(
+    scores: Scores, label: str, *, average: bool = False
+) -> list[dict[str, object]]:
     rows = [
         {
             label: key,
-            "Correct": correct,  # for sorting
-            # "Total": total,
-            # "Accuracy": correct / total,
-            "Score": correct,
+            "Score": correct / total if average else correct,
         }
         for key, (correct, total) in scores.items()
         if total
     ]
-    # rows = sorted(rows, key=lambda row: (-row["Accuracy"], -row["Correct"], row[label]))
-    rows = sorted(rows, key=lambda row: (-row["Correct"], row[label]))
-    # drop "Correct" column
-    rows = [{k: v for k, v in row.items() if k != "Correct"} for row in rows]
-    # for row in rows:
-    #     row["Accuracy"] = f"{row['Accuracy']:.0%}"
-    return rows
+    return sorted(rows, key=lambda row: (-row["Score"], row[label]))
 
 
 def _score_explain(
@@ -86,7 +79,9 @@ def _score_explain(
         correct = outcome.annotated_image == answer
         _add_score(user_scores, _user_label(outcome.user, users), correct)
         _add_score(lab_scores, _lab_label(outcome.user, users), correct)
-    return _ranked_rows(user_scores, "User"), _ranked_rows(lab_scores, "Lab")
+    return _ranked_rows(user_scores, "User"), _ranked_rows(
+        lab_scores, "Lab", average=True
+    )
 
 
 def _score_rate(
@@ -107,7 +102,9 @@ def _score_rate(
         correct = outcome.most_likely_ai == outcome.ai
         _add_score(user_scores, _user_label(outcome.own, users), correct)
         _add_score(lab_scores, _lab_label(outcome.own, users), correct)
-    return _ranked_rows(user_scores, "User"), _ranked_rows(lab_scores, "Lab")
+    return _ranked_rows(user_scores, "User"), _ranked_rows(
+        lab_scores, "Lab", average=True
+    )
 
 
 def _render_board(rows: list[dict[str, object]]) -> None:
@@ -162,11 +159,11 @@ def render_leaderboard_page() -> PageKey | None:
             st.markdown("**Single specimen users**")
             _render_board(explain_user_rows)
         with explain_labs:
-            st.markdown("**Single specimen labs**")
+            st.markdown("**Single specimen labs ⌀**")
             _render_board(explain_lab_rows)
         with rate_users:
             st.markdown("**AI detection users**")
             _render_board(rate_user_rows)
         with rate_labs:
-            st.markdown("**AI detection labs**")
+            st.markdown("**AI detection labs ⌀**")
             _render_board(rate_lab_rows)

@@ -893,26 +893,26 @@ def test_leaderboard_scores_explain_and_rate_by_user_and_lab():
 
     assert explain_user_rows == [
         {
-            "User": "Ada (ada)",
+            "User": "Ada (lab)",
             "Score": 1,
         },
         {
-            "User": "Grace (grace)",
+            "User": "Grace (lab)",
             "Score": 0,
         },
     ]
     assert explain_lab_rows == [
         {
             "Lab": "lab",
-            "Score": 1,
+            "Score": 0.5,
         }
     ]
-    assert rate_user_rows[0]["User"] == "Ada (ada)"
+    assert rate_user_rows[0]["User"] == "Ada (lab)"
     assert rate_user_rows[0]["Score"] == 1
     assert rate_lab_rows == [
         {
             "Lab": "lab",
-            "Score": 1,
+            "Score": 0.5,
         }
     ]
 
@@ -984,10 +984,10 @@ def test_leaderboard_scores_only_tasks_in_challenge():
         users,
     )
 
-    assert explain_user_rows == [{"User": "Ada (ada)", "Score": 1}]
-    assert explain_lab_rows == [{"Lab": "lab", "Score": 1}]
-    assert rate_user_rows == [{"User": "Ada (ada)", "Score": 1}]
-    assert rate_lab_rows == [{"Lab": "lab", "Score": 1}]
+    assert explain_user_rows == [{"User": "Ada (lab)", "Score": 1}]
+    assert explain_lab_rows == [{"Lab": "lab", "Score": 1.0}]
+    assert rate_user_rows == [{"User": "Ada (lab)", "Score": 1}]
+    assert rate_lab_rows == [{"Lab": "lab", "Score": 1.0}]
 
 
 def test_leaderboard_filters_dummy_users():
